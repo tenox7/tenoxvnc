@@ -1,0 +1,294 @@
+/*
+ *  Copyright (C) 2026 tenoxvnc project.
+ *
+ *  This is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This software is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this software; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307,
+ *  USA.
+ */
+
+/*
+ * zrle.c - handle ZRLE encoding, backported from TigerVNC/RealVNC.
+ *
+ * This file is #included by rfbproto.c (once, not per-BPP).  Pixels are
+ * treated as opaque byte strings in the client's requested format, so a
+ * single decoder handles 8, 16 and 32 bits per pixel, including the
+ * compressed 3-byte "CPIXEL" form used for 32bpp with depth <= 24.
+ */
+
+#define rfbZRLETileWidth 64
+#define rfbZRLETileHeight 64
+
+static z_stream zrleStream;
+static Bool zrleStreamActive = False;
+static char *zrleBuf = NULL;
+static int zrleBufSize = 0;
+static Bool zrleReported = False;
+static CARD8 zrleTile[rfbZRLETileWidth * rfbZRLETileHeight * 4];
+
+static void
+ResetZRLEState(void)
+{
+  if (zrleStreamActive) {
+    inflateEnd(&zrleStream);
+    zrleStreamActive = False;
+  }
+  zrleReported = False;
+}
+
+/*
+ * Read one run length (byte 255 adds 255 and continues; total is sum + 1).
+ */
+
+#define ZRLE_RUN_LENGTH(len) \
+  { \
+    CARD8 _b; \
+    (len) = 1; \
+    do { \
+      if (p >= end) goto corrupt; \
+      _b = *p++; \
+      (len) += _b; \
+    } while (_b == 255); \
+  }
+
+/*
+ * Read one CPIXEL into dst (cpixelBytes bytes from the stream, expanded to
+ * bytesPP bytes of client pixel data).
+ */
+
+#define ZRLE_CPIXEL(dst) \
+  { \
+    if (p + cpixelBytes > end) goto corrupt; \
+    if (cpixelBytes == bytesPP) { \
+      memcpy((dst), p, bytesPP); \
+    } else if (cpixelLS != myFormat.bigEndian) { \
+      /* colour bytes first, pad byte last */ \
+      (dst)[0] = p[0]; (dst)[1] = p[1]; (dst)[2] = p[2]; (dst)[3] = 0; \
+    } else { \
+      /* pad byte first, colour bytes last */ \
+      (dst)[0] = 0; (dst)[1] = p[0]; (dst)[2] = p[1]; (dst)[3] = p[2]; \
+    } \
+    p += cpixelBytes; \
+  }
+
+static Bool
+HandleZRLE(int rx, int ry, int rw, int rh)
+{
+  rfbZlibHeader hdr;
+  int remaining, toRead, err;
+  int bytesPP, cpixelBytes;
+  Bool cpixelLS = False;
+  CARD8 *p, *end;
+  int tx, ty, tw, th;
+
+  bytesPP = myFormat.bitsPerPixel / 8;
+
+  /* Decide the CPIXEL size: 3 bytes when 32bpp, depth <= 24 and all colour
+     bits live in three consecutive bytes at one end of the pixel. */
+
+  cpixelBytes = bytesPP;
+  if (myFormat.bitsPerPixel == 32 && myFormat.depth <= 24) {
+    CARD32 colourBits = ((CARD32)myFormat.redMax << myFormat.redShift) |
+			((CARD32)myFormat.greenMax << myFormat.greenShift) |
+			((CARD32)myFormat.blueMax << myFormat.blueShift);
+    if ((colourBits & 0xFF000000) == 0) {
+      cpixelBytes = 3;
+      cpixelLS = True;		/* colour in least significant 3 bytes */
+    } else if ((colourBits & 0x000000FF) == 0) {
+      cpixelBytes = 3;
+      cpixelLS = False;		/* colour in most significant 3 bytes */
+    }
+  }
+
+  if (!zrleReported) {
+    zrleReported = True;
+    fprintf(stderr, ">>> ZRLE using %d-byte cpixels\n", cpixelBytes);
+  }
+
+  if (!ReadFromRFBServer((char *)&hdr, sz_rfbZlibHeader))
+    return False;
+
+  remaining = Swap32IfLE(hdr.nBytes);
+
+  /* Make sure the inflate buffer is large enough for the whole rect: worst
+     case is plain RLE with single-pixel runs (pixel + length byte each),
+     plus a little per-tile overhead. */
+
+  toRead = rw * rh * (bytesPP + 1) + 65536;
+  if (zrleBufSize < toRead) {
+    if (zrleBuf != NULL)
+      free(zrleBuf);
+    zrleBufSize = toRead;
+    zrleBuf = malloc(zrleBufSize);
+    if (zrleBuf == NULL) {
+      zrleBufSize = 0;
+      fprintf(stderr, "ZRLE: out of memory\n");
+      return False;
+    }
+  }
+
+  if (!zrleStreamActive) {
+    zrleStream.zalloc = Z_NULL;
+    zrleStream.zfree = Z_NULL;
+    zrleStream.opaque = Z_NULL;
+    if (inflateInit(&zrleStream) != Z_OK) {
+      fprintf(stderr, "ZRLE: inflateInit failed\n");
+      return False;
+    }
+    zrleStreamActive = True;
+  }
+
+  /* Inflate the entire rect into zrleBuf.  The zlib stream persists across
+     rects for the lifetime of the connection. */
+
+  zrleStream.next_out = (Bytef *)zrleBuf;
+  zrleStream.avail_out = zrleBufSize;
+
+  while (remaining > 0) {
+    toRead = (remaining > BUFFER_SIZE) ? BUFFER_SIZE : remaining;
+
+    if (!ReadFromRFBServer(buffer, toRead))
+      return False;
+    remaining -= toRead;
+
+    zrleStream.next_in = (Bytef *)buffer;
+    zrleStream.avail_in = toRead;
+
+    err = inflate(&zrleStream, Z_SYNC_FLUSH);
+    if (err != Z_OK && err != Z_STREAM_END && err != Z_BUF_ERROR) {
+      fprintf(stderr, "ZRLE: inflate error: %d\n", err);
+      return False;
+    }
+    if (zrleStream.avail_in > 0 && zrleStream.avail_out == 0) {
+      fprintf(stderr, "ZRLE: inflate buffer overflow\n");
+      return False;
+    }
+  }
+
+  p = (CARD8 *)zrleBuf;
+  end = (CARD8 *)zrleBuf + (zrleBufSize - zrleStream.avail_out);
+
+  /* Walk the 64x64 tiles. */
+
+  for (ty = 0; ty < rh; ty += rfbZRLETileHeight) {
+    th = rh - ty;
+    if (th > rfbZRLETileHeight)
+      th = rfbZRLETileHeight;
+
+    for (tx = 0; tx < rw; tx += rfbZRLETileWidth) {
+      CARD8 subenc;
+      CARD8 palette[128 * 4];
+      int i, npixels;
+
+      tw = rw - tx;
+      if (tw > rfbZRLETileWidth)
+	tw = rfbZRLETileWidth;
+
+      npixels = tw * th;
+
+      if (p >= end) goto corrupt;
+      subenc = *p++;
+
+      if (subenc == 0) {
+	/* raw pixels */
+	for (i = 0; i < npixels; i++)
+	  ZRLE_CPIXEL(&zrleTile[i * bytesPP]);
+
+      } else if (subenc == 1) {
+	/* solid colour tile */
+	ZRLE_CPIXEL(&zrleTile[0]);
+	for (i = 1; i < npixels; i++)
+	  memcpy(&zrleTile[i * bytesPP], &zrleTile[0], bytesPP);
+
+      } else if (subenc >= 2 && subenc <= 16) {
+	/* packed palette */
+	int psize = subenc;
+	int bppal, x, y, nbits;
+	CARD8 b;
+
+	for (i = 0; i < psize; i++)
+	  ZRLE_CPIXEL(&palette[i * 4]);
+
+	bppal = (psize > 4) ? 4 : ((psize > 2) ? 2 : 1);
+
+	for (y = 0; y < th; y++) {
+	  nbits = 0;
+	  b = 0;
+	  for (x = 0; x < tw; x++) {
+	    if (nbits == 0) {
+	      if (p >= end) goto corrupt;
+	      b = *p++;
+	      nbits = 8;
+	    }
+	    nbits -= bppal;
+	    i = (b >> nbits) & ((1 << bppal) - 1);
+	    if (i >= psize) goto corrupt;
+	    memcpy(&zrleTile[(y * tw + x) * bytesPP], &palette[i * 4],
+		   bytesPP);
+	  }
+	}
+
+      } else if (subenc == 128) {
+	/* plain RLE */
+	int len;
+	CARD8 pix[4];
+
+	i = 0;
+	while (i < npixels) {
+	  ZRLE_CPIXEL(pix);
+	  ZRLE_RUN_LENGTH(len);
+	  if (i + len > npixels) goto corrupt;
+	  while (len-- > 0)
+	    memcpy(&zrleTile[i++ * bytesPP], pix, bytesPP);
+	}
+
+      } else if (subenc >= 130) {
+	/* palette RLE */
+	int psize = subenc - 128;
+	int len;
+	CARD8 idx;
+
+	for (i = 0; i < psize; i++)
+	  ZRLE_CPIXEL(&palette[i * 4]);
+
+	i = 0;
+	while (i < npixels) {
+	  if (p >= end) goto corrupt;
+	  idx = *p++;
+	  if (idx < 128) {
+	    len = 1;
+	  } else {
+	    idx -= 128;
+	    ZRLE_RUN_LENGTH(len);
+	  }
+	  if (idx >= psize) goto corrupt;
+	  if (i + len > npixels) goto corrupt;
+	  while (len-- > 0)
+	    memcpy(&zrleTile[i++ * bytesPP], &palette[idx * 4], bytesPP);
+	}
+
+      } else {
+	fprintf(stderr, "ZRLE: unknown subencoding %d\n", (int)subenc);
+	return False;
+      }
+
+      CopyDataToScreen((char *)zrleTile, rx + tx, ry + ty, tw, th);
+    }
+  }
+
+  return True;
+
+corrupt:
+  fprintf(stderr, "ZRLE: corrupt data received\n");
+  return False;
+}
