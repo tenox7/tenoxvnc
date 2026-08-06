@@ -6,14 +6,15 @@
 # or just "make" with default CC/CFLAGS/LDFLAGS below.
 
 CC = gcc
-INCS = -I. -Izlib -Ijpeg
+INCS = -Ivnc -Izlib -Ijpeg
 CFLAGS = -O2 $(INCS) -DMITSHM
 LDFLAGS = -lXaw -lXmu -lXt -lXext -lX11 -lm
 TARGET = tenoxvnc
 
-VIEWER_SRCS = argsresources.c caps.c colour.c cursor.c desktop.c dialogs.c \
-	fullscreen.c listen.c misc.c popup.c rfbproto.c selection.c shm.c \
-	sockets.c tunnel.c vncviewer.c vncauth.c d3des.c
+VIEWER_SRCS = vnc/argsresources.c vnc/caps.c vnc/colour.c vnc/cursor.c \
+	vnc/desktop.c vnc/dialogs.c vnc/fullscreen.c vnc/listen.c vnc/misc.c \
+	vnc/popup.c vnc/rfbproto.c vnc/selection.c vnc/shm.c vnc/sockets.c \
+	vnc/tunnel.c vnc/vncviewer.c vnc/vncauth.c vnc/d3des.c
 
 # corre.c hextile.c rre.c tight.c zlib.c zrle.c are #included by rfbproto.c
 
@@ -84,7 +85,7 @@ netbsd:
 	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXaw -lXmu -lXt -lXext -lX11 -lm"
 
 clean:
-	rm -f *.o zlib/*.o jpeg/*.o $(TARGET)
+	rm -f vnc/*.o zlib/*.o jpeg/*.o $(TARGET)
 
 install: $(TARGET)
 	cp $(TARGET) /usr/local/bin/
