@@ -50,6 +50,15 @@ main(int argc, char **argv)
   int i;
   programName = argv[0];
 
+  /* Handle -h/-help/--help before any Xt initialisation so that printing
+     usage does not require an X display. */
+
+  for (i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "-help") == 0 ||
+	strcmp(argv[i], "--help") == 0)
+      usage();
+  }
+
   /* The -listen option is used to make us a daemon process which listens for
      incoming connections from servers, rather than actively connecting to a
      given server. The -tunnel and -via options are useful to create

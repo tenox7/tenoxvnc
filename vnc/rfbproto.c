@@ -1406,7 +1406,7 @@ HandleRFBServerMessage()
 	  XFillRectangle(dpy, desktopWin, dstGC, rect.r.x, rect.r.y,
 			 rect.r.w, rect.r.h);
 	  XSync(dpy,False);
-	  usleep(appData.copyRectDelay * 1000);
+	  Msleep(appData.copyRectDelay);
 	  XFillRectangle(dpy, desktopWin, dstGC, rect.r.x, rect.r.y,
 			 rect.r.w, rect.r.h);
 	  XFillRectangle(dpy, desktopWin, srcGC, cr.srcX, cr.srcY,

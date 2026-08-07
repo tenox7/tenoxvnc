@@ -2,7 +2,7 @@
 # TightVNC 1.3.10 X11 viewer + TigerVNC feature backports, vendored zlib/jpeg
 #
 # Build:  make <target>   where target is one of:
-#   linux solaris hpux hpux10 aix unixware osf1 irix irix5 netbsd macos
+#   linux solaris hpux hpux9 aix unixware osf1 irix irix5 netbsd macos
 # or just "make" with default CC/CFLAGS/LDFLAGS below.
 
 CC = gcc
@@ -51,13 +51,16 @@ solaris:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include" \
 	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXaw -lXmu -lXt -lXext -lX11 -lm -lsocket -lnsl"
 
+# hpux covers 10.20 and 11.x with native ANSI cc; needs gmake.
+# Xaw/Xmu are static archives in /usr/contrib, hence explicit -lSM -lICE.
+# hpux9 uses X11R5 which has no XShm headers.
 hpux:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/include/X11R6" \
-	  LDFLAGS="-L/usr/lib/X11R6 -lXaw -lXmu -lXt -lXext -lX11 -lm"
+	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include" \
+	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXaw -lXmu -lXt -lSM -lICE -lXext -lX11 -lm"
 
-hpux10:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -DNO_SOCKLEN_T -I/usr/include/X11R6" \
-	  LDFLAGS="-L/usr/lib/X11R6 -lXaw -lXmu -lXt -lXext -lX11 -lm"
+hpux9:
+	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include" \
+	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXaw -lXmu -lXt -lXext -lX11 -lm"
 
 aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM" \
@@ -77,7 +80,7 @@ irix:
 
 # see sng Makefile.x11 for the irix5 native-ld story; same recipe works here
 irix5:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DNO_SOCKLEN_T -isystem /usr/include" \
+	$(MAKE) CFLAGS="-O2 $(INCS) -isystem /usr/include" \
 	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
 
 netbsd:
@@ -91,4 +94,4 @@ install: $(TARGET)
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris hpux hpux10 aix unixware osf1 irix irix5 netbsd
+.PHONY: all clean install linux macos solaris hpux hpux9 aix unixware osf1 irix irix5 netbsd

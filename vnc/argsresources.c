@@ -311,7 +311,7 @@ usage(void)
 	  "Usage: %s [<OPTIONS>] [<HOST>][:<DISPLAY#>]\n"
 	  "       %s [<OPTIONS>] [<HOST>][::<PORT#>]\n"
 	  "       %s [<OPTIONS>] -listen [<DISPLAY#>]\n"
-	  "       %s -help\n"
+	  "       %s -h|-help|--help\n"
 	  "\n"
 	  "<OPTIONS> are standard Xt options, or:\n"
 	  "        -via <GATEWAY>\n"

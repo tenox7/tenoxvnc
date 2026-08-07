@@ -533,7 +533,7 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
 
     XSync(dpy,False);
 
-    usleep(appData.rawDelay * 1000);
+    Msleep(appData.rawDelay);
   }
 
   if (!appData.useBGR233) {

@@ -24,19 +24,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <vncauth.h>
 #include <d3des.h>
 
-
-/*
- * Make sure we call srandom() only once.
- */
-
-static int s_srandom_called = 0;
 
 /*
  * We use a fixed key to store passwords, since we assume that our local
@@ -194,29 +186,6 @@ vncDecryptPasswdFromFile2(char *fname,
     memset(passwd, 0, 16);
 
     return (i < 16) ? 1 : 2;
-}
-
-
-/*
- * Generate CHALLENGESIZE random bytes for use in challenge-response
- * authentication.
- */
-
-void
-vncRandomBytes(unsigned char *bytes)
-{
-    int i;
-    unsigned int seed;
-
-    if (!s_srandom_called) {
-      seed = (unsigned int)time(0) ^ (unsigned int)getpid();
-      srandom(seed);
-      s_srandom_called = 1;
-    }
-
-    for (i = 0; i < CHALLENGESIZE; i++) {
-	bytes[i] = (unsigned char)(random() & 255);    
-    }
 }
 
 

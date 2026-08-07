@@ -30,5 +30,4 @@ extern int vncEncryptAndStorePasswd2(char *passwd, char *passwdViewOnly,
 extern char *vncDecryptPasswdFromFile(char *fname);
 extern int vncDecryptPasswdFromFile2(char *fname, char *passwdFullControl,
 				     char *passwdViewOnly);
-extern void vncRandomBytes(unsigned char *bytes);
 extern void vncEncryptBytes(unsigned char *bytes, char *passwd);

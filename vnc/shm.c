@@ -22,6 +22,9 @@
  */
 
 #include <vncviewer.h>
+
+#ifdef MITSHM
+
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <X11/extensions/XShm.h>
@@ -119,3 +122,5 @@ CreateShmImage()
 
   return image;
 }
+
+#endif /* MITSHM */

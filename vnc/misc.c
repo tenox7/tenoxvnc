@@ -232,7 +232,23 @@ Pause(Widget w, XEvent *event, String *params, Cardinal *num_params)
     msec = atoi(params[0]);
   }
 
-  usleep(msec * 1000);
+  Msleep(msec);
+}
+
+
+/*
+ * Millisecond sleep via select(); usleep() does not exist on older
+ * systems such as HP-UX 9.
+ */
+
+void
+Msleep(int msec)
+{
+  struct timeval tv;
+
+  tv.tv_sec = msec / 1000;
+  tv.tv_usec = (msec % 1000) * 1000;
+  select(0, NULL, NULL, NULL, &tv);
 }
 
 
