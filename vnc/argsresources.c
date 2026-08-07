@@ -72,7 +72,7 @@ char *fallback_resources[] = {
   "*popup.buttonForm.translations: #override\\n\
      <KeyPress>: SendRFBEvent() HidePopup()",
 
-  "*popupButtonCount: 9",
+  "*popupButtonCount: 10",
 
   "*popup*button1.label: Dismiss popup",
   "*popup*button1.translations: #override\\n\
@@ -118,6 +118,10 @@ char *fallback_resources[] = {
   "*popup*button9.translations: #override\\n\
      <Visible>: SetContinuousUpdatesState()\\n\
      <Btn1Down>,<Btn1Up>: toggle() ToggleContinuousUpdates() HidePopup()",
+
+  "*popup*button10.label: Repaint screen",
+  "*popup*button10.translations: #override\\n\
+     <Btn1Down>,<Btn1Up>: RepaintScreen() HidePopup()",
 
   NULL
 };
@@ -281,6 +285,7 @@ static XtActionsRec actions[] = {
     {"SetFullScreenState", SetFullScreenState},
     {"ToggleContinuousUpdates", ToggleContinuousUpdates},
     {"SetContinuousUpdatesState", SetContinuousUpdatesState},
+    {"RepaintScreen", RepaintScreen},
     {"SelectionFromVNC", SelectionFromVNC},
     {"SelectionToVNC", SelectionToVNC},
     {"ServerDialogDone", ServerDialogDone},

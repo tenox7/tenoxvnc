@@ -163,6 +163,8 @@ extern void DesktopInitAfterRealization();
 extern void SendRFBEvent(Widget w, XEvent *event, String *params,
 			 Cardinal *num_params);
 extern void CopyDataToScreen(char *buf, int x, int y, int width, int height);
+extern void RepaintScreen(Widget w, XEvent *event, String *params,
+			  Cardinal *num_params);
 extern void SynchroniseScreen();
 extern void ResizeDesktopFramebuffer(int width, int height);
 extern void TrackDesktopResizes(void);

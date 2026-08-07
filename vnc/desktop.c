@@ -495,6 +495,34 @@ SendRFBEvent(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
 
 /*
+ * RepaintScreen is an action which erases the local framebuffer copy and
+ * repaints the whole screen from scratch with a full update request.
+ */
+
+void
+RepaintScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
+{
+  SoftCursorLockArea(0, 0, si.framebufferWidth, si.framebufferHeight);
+
+  memset(image->data, 0, image->bytes_per_line * image->height);
+
+#ifdef MITSHM
+  if (appData.useShm)
+    XShmPutImage(dpy, desktopWin, gc, image, 0, 0, 0, 0,
+		 si.framebufferWidth, si.framebufferHeight, False);
+  else
+#endif
+    XPutImage(dpy, desktopWin, gc, image, 0, 0, 0, 0,
+	      si.framebufferWidth, si.framebufferHeight);
+
+  SoftCursorUnlockScreen();
+
+  SendFramebufferUpdateRequest(0, 0, si.framebufferWidth,
+			       si.framebufferHeight, False);
+}
+
+
+/*
  * CreateDotCursor.
  */
 
