@@ -246,6 +246,10 @@ extern Bool SendClientCutText(char *str, int len);
 extern Bool SendSetDesktopSize(int width, int height);
 extern Bool SendEnableContinuousUpdates(Bool enable, int x, int y,
 					int w, int h);
+extern void ToggleContinuousUpdates(Widget w, XEvent *ev, String *params,
+				    Cardinal *num_params);
+extern void SetContinuousUpdatesState(Widget w, XEvent *ev, String *params,
+				      Cardinal *num_params);
 extern Bool SendFence(CARD32 flags, int len, char *data);
 extern Bool HandleRFBServerMessage();
 

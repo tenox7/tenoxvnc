@@ -814,7 +814,7 @@ SetFormatAndEncodings()
       encs[se->nEncodings++] = Swap32IfLE(rfbEncodingDesktopName);
     if (se->nEncodings < MAX_ENCODINGS)
       encs[se->nEncodings++] = Swap32IfLE(rfbEncodingFence);
-    if (se->nEncodings < MAX_ENCODINGS && appData.useContinuousUpdates)
+    if (se->nEncodings < MAX_ENCODINGS)
       encs[se->nEncodings++] = Swap32IfLE(rfbEncodingContinuousUpdates);
   }
   else {
@@ -865,8 +865,7 @@ SetFormatAndEncodings()
     encs[se->nEncodings++] = Swap32IfLE(rfbEncodingExtendedDesktopSize);
     encs[se->nEncodings++] = Swap32IfLE(rfbEncodingDesktopName);
     encs[se->nEncodings++] = Swap32IfLE(rfbEncodingFence);
-    if (appData.useContinuousUpdates)
-      encs[se->nEncodings++] = Swap32IfLE(rfbEncodingContinuousUpdates);
+    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingContinuousUpdates);
   }
 
   {
@@ -1067,6 +1066,46 @@ SendEnableContinuousUpdates(Bool enable, int x, int y, int w, int h)
   ecu.h = Swap16IfLE(h);
 
   return WriteExact(rfbsock, (char *)&ecu, sz_rfbEnableContinuousUpdatesMsg);
+}
+
+
+/*
+ * ToggleContinuousUpdates is an action which switches continuous updates on
+ * or off during an active connection.  Disabling is asynchronous: the server
+ * confirms with EndOfContinuousUpdates, whose handler resumes polling.
+ */
+
+void
+ToggleContinuousUpdates(Widget w, XEvent *ev, String *params,
+			Cardinal *num_params)
+{
+  if (!supportsCU) {
+    fprintf(stderr, "Server does not support continuous updates\n");
+    return;
+  }
+
+  if (cuActive) {
+    SendEnableContinuousUpdates(False, 0, 0, 0, 0);
+  } else {
+    fprintf(stderr, ">>> Continuous updates enabled\n");
+    cuActive = True;
+    SendEnableContinuousUpdates(True, 0, 0, si.framebufferWidth,
+				si.framebufferHeight);
+  }
+}
+
+
+/*
+ * SetContinuousUpdatesState is an action which sets the "state" resource of a
+ * toggle widget to reflect whether continuous updates are active, greyed out
+ * until the server has announced support.
+ */
+
+void
+SetContinuousUpdatesState(Widget w, XEvent *ev, String *params,
+			  Cardinal *num_params)
+{
+  XtVaSetValues(w, "state", cuActive, XtNsensitive, supportsCU, NULL);
 }
 
 
@@ -1654,6 +1693,7 @@ HandleRFBServerMessage()
 
     if (cuActive) {
       cuActive = False;
+      fprintf(stderr, ">>> Continuous updates disabled\n");
       if (!SendIncrementalFramebufferUpdateRequest())
 	return False;
     }
