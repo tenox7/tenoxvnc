@@ -65,6 +65,7 @@ char *fallback_resources[] = {
   "*popup.title: TenoxVNC popup",
   "*popup*background: grey",
   "*popup*font: -*-helvetica-bold-r-*-*-16-*-*-*-*-*-*-*",
+  "*popup*justify: left",
   "*popup.buttonForm.Command.borderWidth: 0",
   "*popup.buttonForm.Toggle.borderWidth: 0",
 
