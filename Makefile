@@ -78,10 +78,19 @@ irix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -isystem /usr/include" \
 	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
 
-# see sng Makefile.x11 for the irix5 native-ld story; same recipe works here
+# see sng Makefile.x11 for the irix5 native-ld story; same recipe works here:
+# compile with gcc, link with tgcware GNU ld directly (5.3 native ld can't
+# read gas objects, and collect2 has /usr/bin/ld baked in)
+IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
+IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
+
 irix5:
-	$(MAKE) CFLAGS="-O2 $(INCS) -isystem /usr/include" \
-	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
+	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include"
+	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
+	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
+	  -L$(IRIX5_GCCLIB) -L$(IRIX5_GCCLIB)/../../.. -L/usr/lib \
+	  $(OBJECTS) -lXaw -lXmu -lXt -lXext -lX11 -lm -lgcc -lgcc_eh -lc \
+	  $(IRIX5_GCCLIB)/crtend.o $(IRIX5_GCCLIB)/irix-crtn.o /usr/lib/crtn.o
 
 netbsd:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include" \
