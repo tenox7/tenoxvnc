@@ -107,6 +107,7 @@ typedef struct {
   Bool enableJPEG;
   Bool useRemoteCursor;
   Bool useX11Cursor;
+  String localCursor;
   Bool autoPass;
 
   Bool useRemoteResize;
@@ -165,6 +166,10 @@ extern void SendRFBEvent(Widget w, XEvent *event, String *params,
 extern void CopyDataToScreen(char *buf, int x, int y, int width, int height);
 extern void RepaintScreen(Widget w, XEvent *event, String *params,
 			  Cardinal *num_params);
+extern void CycleLocalCursor(Widget w, XEvent *event, String *params,
+			     Cardinal *num_params);
+extern void SetLocalCursorState(Widget w, XEvent *event, String *params,
+				Cardinal *num_params);
 extern void SynchroniseScreen();
 extern void ResizeDesktopFramebuffer(int width, int height);
 extern void TrackDesktopResizes(void);

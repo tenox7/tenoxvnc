@@ -72,7 +72,7 @@ char *fallback_resources[] = {
   "*popup.buttonForm.translations: #override\\n\
      <KeyPress>: SendRFBEvent() HidePopup()",
 
-  "*popupButtonCount: 10",
+  "*popupButtonCount: 11",
 
   "*popup*button1.label: Dismiss popup",
   "*popup*button1.translations: #override\\n\
@@ -122,6 +122,11 @@ char *fallback_resources[] = {
   "*popup*button10.label: Repaint screen",
   "*popup*button10.translations: #override\\n\
      <Btn1Down>,<Btn1Up>: RepaintScreen() HidePopup()",
+
+  "*popup*button11.label: Local cursor: arrow",
+  "*popup*button11.translations: #override\\n\
+     <Visible>: SetLocalCursorState()\\n\
+     <Btn1Down>,<Btn1Up>: CycleLocalCursor()",
 
   NULL
 };
@@ -226,6 +231,9 @@ static XtResource appDataResourceList[] = {
   {"useX11Cursor", "UseX11Cursor", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, useX11Cursor), XtRImmediate, (XtPointer) False},
 
+  {"localCursor", "LocalCursor", XtRString, sizeof(String),
+   XtOffsetOf(AppData, localCursor), XtRImmediate, (XtPointer) "dot"},
+
   {"grabKeyboard", "GrabKeyboard", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, grabKeyboard), XtRImmediate, (XtPointer) False},
 
@@ -263,6 +271,7 @@ XrmOptionDescRec cmdLineOptions[] = {
   {"-nojpeg",        "*enableJPEG",         XrmoptionNoArg,  "False"},
   {"-nocursorshape", "*useRemoteCursor",    XrmoptionNoArg,  "False"},
   {"-x11cursor",     "*useX11Cursor",       XrmoptionNoArg,  "True"},
+  {"-cursor",        "*localCursor",        XrmoptionSepArg, 0},
   {"-autopass",      "*autoPass",           XrmoptionNoArg,  "True"},
   {"-remoteresize",  "*remoteResize",       XrmoptionNoArg,  "True"},
   {"-noremoteresize","*remoteResize",       XrmoptionNoArg,  "False"},
@@ -286,6 +295,8 @@ static XtActionsRec actions[] = {
     {"ToggleContinuousUpdates", ToggleContinuousUpdates},
     {"SetContinuousUpdatesState", SetContinuousUpdatesState},
     {"RepaintScreen", RepaintScreen},
+    {"CycleLocalCursor", CycleLocalCursor},
+    {"SetLocalCursorState", SetLocalCursorState},
     {"SelectionFromVNC", SelectionFromVNC},
     {"SelectionToVNC", SelectionToVNC},
     {"ServerDialogDone", ServerDialogDone},
@@ -344,6 +355,7 @@ usage(void)
 	  "        -nojpeg\n"
 	  "        -nocursorshape\n"
 	  "        -x11cursor\n"
+	  "        -cursor dot|arrow|none (local cursor shown over the desktop)\n"
 	  "        -autopass\n"
 	  "        -noremoteresize (don't resize remote desktop to fit window)\n"
 	  "        -nocontinuous (don't use continuous updates)\n"

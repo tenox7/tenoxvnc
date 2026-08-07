@@ -24,6 +24,7 @@
 #include <vncviewer.h>
 #include <X11/Xaw/Viewport.h>
 #include <X11/Xmu/Converters.h>
+#include <X11/cursorfont.h>
 #ifdef MITSHM
 #include <X11/extensions/XShm.h>
 #endif
@@ -42,7 +43,12 @@ static Bool imageIsShm = False;
 static XtIntervalId resizeTimer = 0;
 static int wantResizeWidth, wantResizeHeight;
 
+enum { CURSOR_DOT, CURSOR_ARROW, CURSOR_NONE };
+static const char *cursorModeNames[] = { "dot", "arrow", "none" };
+static int cursorMode = CURSOR_DOT;
+
 static Cursor CreateDotCursor();
+static Cursor CursorForMode(void);
 static void CreateDesktopImage(void);
 static void CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width,int height);
 static void HandleBasicDesktopEvent(Widget w, XtPointer ptr, XEvent *ev,
@@ -143,6 +149,7 @@ DesktopInitAfterRealization()
   XGCValues gcv;
   XSetWindowAttributes attr;
   unsigned long valuemask;
+  int i;
 
   desktopWin = XtWindow(desktop);
 
@@ -161,9 +168,12 @@ DesktopInitAfterRealization()
 			      desktopBackingStoreResources, 1, NULL);
   valuemask = CWBackingStore;
 
+  for (i = 0; i < 3; i++)
+    if (strcasecmp(appData.localCursor, cursorModeNames[i]) == 0)
+      cursorMode = i;
+
   if (!appData.useX11Cursor) {
-    dotCursor = CreateDotCursor();
-    attr.cursor = dotCursor;
+    attr.cursor = CursorForMode();
     valuemask |= CWCursor;
   }
 
@@ -523,6 +533,40 @@ RepaintScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
 
 /*
+ * SetLocalCursorState is an action which puts the current cursor mode into
+ * the label of the popup menu button.
+ */
+
+void
+SetLocalCursorState(Widget w, XEvent *ev, String *params, Cardinal *num_params)
+{
+  char label[32];
+
+  sprintf(label, "Local cursor: %s", cursorModeNames[cursorMode]);
+  XtVaSetValues(w, XtNlabel, label, NULL);
+}
+
+
+/*
+ * CycleLocalCursor is an action which cycles the local cursor between the
+ * dot, a real arrow, and no cursor at all (remote only).
+ */
+
+void
+CycleLocalCursor(Widget w, XEvent *ev, String *params, Cardinal *num_params)
+{
+  cursorMode = (cursorMode + 1) % 3;
+
+  /* stop remote cursor shapes overriding the explicit choice */
+  appData.useX11Cursor = False;
+
+  XDefineCursor(dpy, desktopWin, CursorForMode());
+  fprintf(stderr, "Local cursor: %s\n", cursorModeNames[cursorMode]);
+  SetLocalCursorState(w, ev, params, num_params);
+}
+
+
+/*
  * CreateDotCursor.
  */
 
@@ -546,6 +590,43 @@ CreateDotCursor()
   XFreePixmap(dpy, msk);
 
   return cursor;
+}
+
+
+/*
+ * CursorForMode returns (lazily creating) the X cursor for the current local
+ * cursor mode.
+ */
+
+static Cursor
+CursorForMode(void)
+{
+  static Cursor arrowCursor = None, blankCursor = None;
+  static char noData[] = { 0 };
+  Pixmap p;
+  XColor c;
+
+  switch (cursorMode) {
+
+  case CURSOR_ARROW:
+    if (arrowCursor == None)
+      arrowCursor = XCreateFontCursor(dpy, XC_left_ptr);
+    return arrowCursor;
+
+  case CURSOR_NONE:
+    if (blankCursor == None) {
+      p = XCreateBitmapFromData(dpy, DefaultRootWindow(dpy), noData, 1, 1);
+      memset(&c, 0, sizeof(c));
+      blankCursor = XCreatePixmapCursor(dpy, p, p, &c, &c, 0, 0);
+      XFreePixmap(dpy, p);
+    }
+    return blankCursor;
+
+  default:
+    if (dotCursor == None)
+      dotCursor = CreateDotCursor();
+    return dotCursor;
+  }
 }
 
 
