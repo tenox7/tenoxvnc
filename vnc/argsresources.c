@@ -360,6 +360,9 @@ usage(void)
 	  "        -noremoteresize (don't resize remote desktop to fit window)\n"
 	  "        -nocontinuous (don't use continuous updates)\n"
 	  "\n"
+	  "If the VNC_PASSWORD environment variable is set, its value is used\n"
+	  "as the password for standard VNC authentication.\n"
+	  "\n"
 	  "Option names may be abbreviated, e.g. -bgr instead of -bgr233.\n"
 	  "See the manual page for more information."
 	  "\n", programName, programName, programName, programName);

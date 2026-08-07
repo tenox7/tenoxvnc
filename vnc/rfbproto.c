@@ -575,6 +575,7 @@ AuthenticateVNC(void)
   CARD32 authScheme;
   CARD8 challenge[CHALLENGESIZE];
   char *passwd;
+  char *envpw;
   char  buffer[64];
   char* cstatus;
   int   len;
@@ -602,6 +603,10 @@ AuthenticateVNC(void)
        if (len > 0 && buffer[len - 1] == '\n')
 	  buffer[len - 1] = '\0';
     }
+  } else if ((envpw = getenv("VNC_PASSWORD")) != NULL && envpw[0] != '\0') {
+    passwd = buffer;
+    strncpy(buffer, envpw, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
   } else if (appData.passwordDialog) {
     passwd = DoPasswordDialog();
   } else {
