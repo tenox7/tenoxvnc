@@ -112,7 +112,7 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 
   if (!zrleReported) {
     zrleReported = True;
-    fprintf(stderr, ">>> ZRLE using %d-byte cpixels\n", cpixelBytes);
+    fprintf(stderr, "ZRLE using %d-byte cpixels\n", cpixelBytes);
   }
 
   if (!ReadFromRFBServer((char *)&hdr, sz_rfbZlibHeader))

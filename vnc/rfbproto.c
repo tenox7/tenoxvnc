@@ -93,7 +93,7 @@ static Bool firstUpdate = True;
 static CARD32 screenId = 0;
 static CARD32 screenFlags = 0;
 
-/* ">>>" reporting of what the server actually sends */
+/* reporting of what the server actually sends */
 static CARD32 reportedEncs[16];
 static int nReportedEncs = 0;
 static Bool tightJpegReported = False;
@@ -899,7 +899,7 @@ SetFormatAndEncodings()
         jpegEnabled = True;
       }
     }
-    fprintf(stderr, ">>> Requesting %s encoding", primaryEnc);
+    fprintf(stderr, "Requesting %s encoding", primaryEnc);
     if (compLevel >= 0)
       fprintf(stderr, ", zlib compression level %d", compLevel);
     if (jpegEnabled)
@@ -1092,7 +1092,7 @@ ToggleContinuousUpdates(Widget w, XEvent *ev, String *params,
   if (cuActive) {
     SendEnableContinuousUpdates(False, 0, 0, 0, 0);
   } else {
-    fprintf(stderr, ">>> Continuous updates enabled\n");
+    fprintf(stderr, "Continuous updates enabled\n");
     cuActive = True;
     SendEnableContinuousUpdates(True, 0, 0, si.framebufferWidth,
 				si.framebufferHeight);
@@ -1192,7 +1192,7 @@ HandleExtendedDesktopSize(int reason, int result, int w, int h)
   supportsSetDesktopSize = True;
 
   if (firstEDS)
-    fprintf(stderr, ">>> Server supports remote desktop resizing "
+    fprintf(stderr, "Server supports remote desktop resizing "
 	    "(SetDesktopSize)\n");
 
   if (reason == rfbEDSReasonClient) {
@@ -1279,7 +1279,7 @@ ReportRectEncoding(CARD32 enc)
   default:                  return;
   }
 
-  fprintf(stderr, ">>> Server using %s encoding\n", name);
+  fprintf(stderr, "Server using %s encoding\n", name);
 }
 
 
@@ -1597,7 +1597,7 @@ HandleRFBServerMessage()
     if (firstUpdate) {
       firstUpdate = False;
       if (supportsCU && appData.useContinuousUpdates) {
-	fprintf(stderr, ">>> Continuous updates enabled\n");
+	fprintf(stderr, "Continuous updates enabled\n");
 	cuActive = True;
 	if (!SendEnableContinuousUpdates(True, 0, 0, si.framebufferWidth,
 					 si.framebufferHeight))
@@ -1669,11 +1669,11 @@ HandleRFBServerMessage()
     }
 
     if (!supportsFence)
-      fprintf(stderr, ">>> Server using fence extension\n");
+      fprintf(stderr, "Server using fence extension\n");
     supportsFence = True;
 
     if (appData.debug)
-      fprintf(stderr, ">>> Fence from server (flags 0x%lx, %d bytes)\n",
+      fprintf(stderr, "Fence from server (flags 0x%lx, %d bytes)\n",
 	      (unsigned long)msg.fence.flags, (int)msg.fence.length);
 
     /* We handle all messages synchronously, so we can simply accept any
@@ -1698,7 +1698,7 @@ HandleRFBServerMessage()
 
     if (cuActive) {
       cuActive = False;
-      fprintf(stderr, ">>> Continuous updates disabled\n");
+      fprintf(stderr, "Continuous updates disabled\n");
       if (!SendIncrementalFramebufferUpdateRequest())
 	return False;
     }

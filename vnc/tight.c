@@ -548,7 +548,7 @@ DecompressJpegRectBPP(int x, int y, int w, int h)
 
   if (!tightJpegReported) {
     tightJpegReported = True;
-    fprintf(stderr, ">>> Tight rects using JPEG (requested quality level %d)\n",
+    fprintf(stderr, "Tight rects using JPEG (requested quality level %d)\n",
 	    appData.qualityLevel);
   }
 
