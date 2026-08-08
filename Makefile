@@ -36,7 +36,12 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
-%.o: %.c
+# POSIX suffix rule, not a GNU "%.o: %.c" pattern rule: HP-UX native make
+# ignores pattern rules and its built-in .c.o has no -o $@, so objects land in
+# the cwd instead of next to the source and the link fails on missing vnc/*.o
+.SUFFIXES: .c .o
+
+.c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 linux:
@@ -97,7 +102,7 @@ netbsd:
 	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXaw -lXmu -lXt -lXext -lX11 -lm"
 
 clean:
-	rm -f vnc/*.o zlib/*.o jpeg/*.o $(TARGET)
+	rm -f *.o */*.o $(TARGET)
 
 install: $(TARGET)
 	cp $(TARGET) /usr/local/bin/

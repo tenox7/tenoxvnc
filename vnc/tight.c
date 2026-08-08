@@ -97,6 +97,12 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
   int bufferSize, rowSize, numRows, portionLen, rowsProcessed, extraBytes;
   CARDBPP *rawData;
 
+  if (rw > RFB_TIGHT_MAX_WIDTH) {
+    fprintf(stderr, "Tight: rectangle width %d exceeds maximum %d\n",
+	    rw, RFB_TIGHT_MAX_WIDTH);
+    return False;
+  }
+
   if (!ReadFromRFBServer((char *)&comp_ctl, 1))
     return False;
 

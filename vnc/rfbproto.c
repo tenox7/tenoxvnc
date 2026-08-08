@@ -116,7 +116,7 @@ static CapsContainer *encodingCaps;  /* known encodings besides Raw        */
    Hextile also assumes it is big enough to hold 16 * 16 * 32 bits.
    Tight encoding assumes BUFFER_SIZE is at least 16384 bytes. */
 
-#define BUFFER_SIZE (640*480)
+#define BUFFER_SIZE RFB_BUFFER_SIZE
 static char buffer[BUFFER_SIZE];
 
 
@@ -342,7 +342,12 @@ InitialiseRFBConnection(void)
   si.format.blueMax = Swap16IfLE(si.format.blueMax);
   si.nameLength = Swap32IfLE(si.nameLength);
 
-  /* FIXME: Check arguments to malloc() calls. */
+  if (!RfbValidServerStringLength(si.nameLength, 1)) {
+    fprintf(stderr, "Desktop name length too large (%lu bytes)\n",
+            (unsigned long)si.nameLength);
+    return False;
+  }
+
   desktopName = malloc(si.nameLength + 1);
   if (!desktopName) {
     fprintf(stderr, "Error allocating memory for desktop name, %lu bytes\n",
@@ -1229,6 +1234,12 @@ HandleDesktopName(void)
     return False;
   nameLen = Swap32IfLE(nameLen);
 
+  if (!RfbValidServerStringLength(nameLen, 1)) {
+    fprintf(stderr, "Desktop name length too large (%lu bytes)\n",
+            (unsigned long)nameLen);
+    return False;
+  }
+
   name = malloc(nameLen + 1);
   if (name == NULL)
     return False;
@@ -1353,6 +1364,13 @@ HandleRFBServerMessage()
 
       if (rect.encoding == rfbEncodingXCursor ||
 	  rect.encoding == rfbEncodingRichCursor) {
+	if (rect.r.w <= 0 || rect.r.h <= 0 ||
+	    rect.r.w > RFB_MAX_CURSOR_DIMENSION ||
+	    rect.r.h > RFB_MAX_CURSOR_DIMENSION) {
+	  fprintf(stderr, "Cursor shape too large: %dx%d\n",
+		  rect.r.w, rect.r.h);
+	  return False;
+	}
 	if (!HandleCursorShape(rect.r.x, rect.r.y, rect.r.w, rect.r.h,
 			      rect.encoding)) {
 	  return False;
@@ -1635,10 +1653,20 @@ HandleRFBServerMessage()
 
     msg.sct.length = Swap32IfLE(msg.sct.length);
 
+    if (!RfbValidServerStringLength(msg.sct.length, 1)) {
+      fprintf(stderr, "ServerCutText length too large (%lu bytes)\n",
+              (unsigned long)msg.sct.length);
+      return False;
+    }
+
     if (serverCutText)
       free(serverCutText);
 
     serverCutText = malloc(msg.sct.length+1);
+    if (serverCutText == NULL) {
+      fprintf(stderr, "ServerCutText: out of memory\n");
+      return False;
+    }
 
     if (!ReadFromRFBServer(serverCutText, msg.sct.length))
       return False;
@@ -1768,7 +1796,10 @@ ReadConnFailedReason(void)
 
   if (ReadFromRFBServer((char *)&reasonLen, sizeof(reasonLen))) {
     reasonLen = Swap32IfLE(reasonLen);
-    if ((reason = malloc(reasonLen)) != NULL &&
+    if (!RfbValidServerStringLength(reasonLen, 0)) {
+      fprintf(stderr, "Connection failure reason too long (%lu bytes)\n",
+              (unsigned long)reasonLen);
+    } else if ((reason = malloc(reasonLen)) != NULL &&
         ReadFromRFBServer(reason, reasonLen)) {
       fprintf(stderr,"%.*s\n", (int)reasonLen, reason);
       free(reason);

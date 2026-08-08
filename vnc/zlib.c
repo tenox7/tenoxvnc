@@ -37,6 +37,7 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
   int remaining;
   int inflateResult;
   int toRead;
+  size_t needSize;
 
   /* First make sure we have a large enough raw buffer to hold the
    * decompressed data.  In practice, with a fixed BPP, fixed frame
@@ -44,16 +45,32 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
    * buffer, this buffer allocation should only happen once, on the
    * first update.
    */
-  if ( raw_buffer_size < (( rw * rh ) * ( BPP / 8 ))) {
+  if (!RfbMulSize((size_t)rw, (size_t)rh, (size_t)(BPP / 8), &needSize)) {
+    fprintf(stderr, "Zlib: rectangle pixel data size overflow\n");
+    return False;
+  }
+  if (needSize > RFB_MAX_ALLOC_SIZE) {
+    fprintf(stderr, "Zlib: rectangle pixel data too large\n");
+    return False;
+  }
 
-    if ( raw_buffer != NULL ) {
+  /* raw_buffer_size is -1 until the first allocation, so test the sign
+     before comparing as size_t. */
+  if (raw_buffer_size < 0 || (size_t)raw_buffer_size < needSize) {
 
-      free( raw_buffer );
+    if (raw_buffer != NULL) {
+
+      free(raw_buffer);
 
     }
 
-    raw_buffer_size = (( rw * rh ) * ( BPP / 8 ));
-    raw_buffer = (char*) malloc( raw_buffer_size );
+    raw_buffer_size = (int)needSize;
+    raw_buffer = (char*) malloc(needSize);
+    if (raw_buffer == NULL) {
+      raw_buffer_size = -1;
+      fprintf(stderr, "Zlib: out of memory\n");
+      return False;
+    }
 
   }
 

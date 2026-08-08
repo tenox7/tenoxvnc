@@ -53,6 +53,14 @@ extern int endianTest;
 
 #define MAX_ENCODINGS 32
 
+/* Limits on server-controlled lengths and dimensions (malicious-server hardening). */
+#define RFB_BUFFER_SIZE (640*480)
+#define RFB_TIGHT_MAX_WIDTH 2048
+#define RFB_MAX_STRING_LENGTH 65536
+#define RFB_MAX_CURSOR_DIMENSION 4096
+#define RFB_MAX_RRE_SUBRECTS 65535
+#define RFB_MAX_ALLOC_SIZE ((size_t)0x7fffffff)
+
 #define LISTEN_PORT_OFFSET 5500
 #define TUNNEL_PORT_OFFSET 5500
 #define SERVER_PORT_OFFSET 5900
@@ -213,6 +221,10 @@ extern void RunCommand(Widget w, XEvent *event, String *params,
 extern void Quit(Widget w, XEvent *event, String *params,
 		 Cardinal *num_params);
 extern void Cleanup();
+
+extern Bool RfbMulSize(size_t a, size_t b, size_t c, size_t *result);
+extern Bool RfbCheckAddSize(size_t base, size_t extra, size_t *result);
+extern Bool RfbValidServerStringLength(CARD32 len, size_t extra);
 
 /* popup.c */
 

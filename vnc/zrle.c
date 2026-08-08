@@ -124,7 +124,26 @@ HandleZRLE(int rx, int ry, int rw, int rh)
      case is plain RLE with single-pixel runs (pixel + length byte each),
      plus a little per-tile overhead. */
 
-  toRead = rw * rh * (bytesPP + 1) + 65536;
+  {
+    size_t tileWorstCase;
+    size_t toReadSize;
+
+    if (!RfbMulSize((size_t)rw, (size_t)rh, (size_t)(bytesPP + 1),
+		    &tileWorstCase)) {
+      fprintf(stderr, "ZRLE: rectangle pixel data size overflow\n");
+      return False;
+    }
+    if (!RfbCheckAddSize(tileWorstCase, 65536, &toReadSize)) {
+      fprintf(stderr, "ZRLE: inflate buffer size overflow\n");
+      return False;
+    }
+    if (toReadSize > RFB_MAX_ALLOC_SIZE) {
+      fprintf(stderr, "ZRLE: inflate buffer too large\n");
+      return False;
+    }
+    toRead = (int)toReadSize;
+  }
+
   if (zrleBufSize < toRead) {
     if (zrleBuf != NULL)
       free(zrleBuf);

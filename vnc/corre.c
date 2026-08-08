@@ -44,6 +44,23 @@ HandleCoRREBPP (int rx, int ry, int rw, int rh)
 
     hdr.nSubrects = Swap32IfLE(hdr.nSubrects);
 
+    {
+      size_t subrectSize = 4 + (BPP / 8);
+      size_t readSize;
+
+      if (subrectSize == 0 || hdr.nSubrects > BUFFER_SIZE / subrectSize) {
+	fprintf(stderr, "CoRRE: too many subrects (%lu)\n",
+		(unsigned long)hdr.nSubrects);
+	return False;
+      }
+      readSize = (size_t)hdr.nSubrects * subrectSize;
+      if (readSize > BUFFER_SIZE) {
+	fprintf(stderr, "CoRRE: subrect data too large (%lu bytes)\n",
+		(unsigned long)readSize);
+	return False;
+      }
+    }
+
     if (!ReadFromRFBServer((char *)&pix, sizeof(pix)))
 	return False;
 

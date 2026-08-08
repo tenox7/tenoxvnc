@@ -34,6 +34,53 @@ static int CleanupXIOErrorHandler(Display *dpy);
 static void CleanupXtErrorHandler(String message) _X_NORETURN;
 static Bool IconifyNamedWindow(Window w, char *name, Bool undo);
 
+/*
+ * Overflow-checked size_t arithmetic for server-derived allocation sizes.
+ */
+
+Bool
+RfbMulSize(size_t a, size_t b, size_t c, size_t *result)
+{
+  size_t ab;
+
+  if (result == NULL)
+    return False;
+
+  if (a == 0 || b == 0 || c == 0) {
+    *result = 0;
+    return True;
+  }
+
+  if (b != 0 && a > ((size_t)-1) / b)
+    return False;
+  ab = a * b;
+  if (c != 0 && ab > ((size_t)-1) / c)
+    return False;
+  *result = ab * c;
+  return True;
+}
+
+Bool
+RfbCheckAddSize(size_t base, size_t extra, size_t *result)
+{
+  if (result == NULL)
+    return False;
+  if (base > ((size_t)-1) - extra)
+    return False;
+  *result = base + extra;
+  return True;
+}
+
+Bool
+RfbValidServerStringLength(CARD32 len, size_t extra)
+{
+  size_t total;
+
+  if (len > RFB_MAX_STRING_LENGTH)
+    return False;
+  return RfbCheckAddSize((size_t)len, extra, &total);
+}
+
 Dimension dpyWidth, dpyHeight;
 Atom wmDeleteWindow, wmState;
 
@@ -134,14 +181,15 @@ ToplevelInitBeforeRealization()
  * UpdateWindowTitle sets the window and icon titles from the current
  * desktopName plus brief session info: encoding, colour mode, protocol
  * version and view-only state.  Called again whenever any of it changes
- * (encodings negotiated, DesktopName updates).
+ * (encodings negotiated, DesktopName updates).  Falls back to "TenoxVNC"
+ * if the server did not supply a desktop name.
  */
 
 void
 UpdateWindowTitle(void)
 {
   char depth[16], info[96];
-  char *title;
+  char *title, *name;
 
   if (appData.useBGR233)
     strcpy(depth, "bgr233");
@@ -153,10 +201,12 @@ UpdateWindowTitle(void)
 	  depth, protocolMinorVersion, tightVncProtocol ? "t" : "",
 	  appData.viewOnly ? " ro" : "");
 
-  title = XtMalloc(strlen(desktopName) + strlen(info) + 32);
-  sprintf(title, "TenoxVNC: %s (%s) [F8 Menu]", desktopName, info);
+  name = (desktopName && desktopName[0]) ? desktopName : "TenoxVNC";
+
+  title = XtMalloc(strlen(name) + strlen(info) + 32);
+  sprintf(title, "%s (%s) [F8 Menu]", name, info);
   XtVaSetValues(toplevel, XtNtitle, title,
-		XtNiconName, desktopName, NULL);
+		XtNiconName, name, NULL);
   XtFree(title);
 }
 

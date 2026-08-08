@@ -169,6 +169,7 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 {
   int bytesPerPixel;
   size_t bytesPerRow, bytesMaskData;
+  size_t pixelBytes, maskBytes;
   Drawable dr;
   rfbXCursorColors rgb;
   CARD32 colors[2];
@@ -186,9 +187,21 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
   if (width * height == 0)
     return True;
 
+  if (width > RFB_MAX_CURSOR_DIMENSION || height > RFB_MAX_CURSOR_DIMENSION) {
+    fprintf(stderr, "Cursor shape too large: %dx%d\n", width, height);
+    return False;
+  }
+
+  if (!RfbMulSize((size_t)width, (size_t)height, (size_t)bytesPerPixel,
+		  &pixelBytes) ||
+      !RfbMulSize((size_t)width, (size_t)height, 1, &maskBytes)) {
+    fprintf(stderr, "Cursor shape pixel data size overflow\n");
+    return False;
+  }
+
   /* Allocate memory for pixel data and temporary mask data. */
 
-  rcSource = malloc(width * height * bytesPerPixel);
+  rcSource = malloc(pixelBytes);
   if (rcSource == NULL)
     return False;
 
@@ -255,7 +268,7 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 
   } else {			/* enc == rfbEncodingRichCursor */
 
-    if (!ReadFromRFBServer((char *)rcSource, width * height * bytesPerPixel)) {
+    if (!ReadFromRFBServer((char *)rcSource, pixelBytes)) {
       free(rcSource);
       free(buf);
       return False;
@@ -271,7 +284,7 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
     return False;
   }
 
-  rcMask = malloc(width * height);
+  rcMask = malloc(maskBytes);
   if (rcMask == NULL) {
     free(rcSource);
     free(buf);

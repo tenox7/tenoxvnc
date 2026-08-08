@@ -43,6 +43,12 @@ HandleRREBPP (int rx, int ry, int rw, int rh)
 
   hdr.nSubrects = Swap32IfLE(hdr.nSubrects);
 
+  if (hdr.nSubrects > RFB_MAX_RRE_SUBRECTS) {
+    fprintf(stderr, "RRE: too many subrects (%lu)\n",
+	    (unsigned long)hdr.nSubrects);
+    return False;
+  }
+
   if (!ReadFromRFBServer((char *)&pix, sizeof(pix)))
     return False;
 
