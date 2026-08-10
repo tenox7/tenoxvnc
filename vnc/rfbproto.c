@@ -234,6 +234,35 @@ ConnectToRFBServer(const char *hostname, int port)
 
 
 /*
+ * SanitizeDesktopName - servers may send the desktop name as UTF-8, in some
+ * other 8-bit charset, or with embedded control characters.  The window
+ * title and our stderr messages can only carry plain ASCII, so filter the
+ * name in place, collapsing each run of anything outside printable 7-bit
+ * ASCII into a single '?'.  Leaves an empty string if nothing survives, in
+ * which case the title falls back to the default.
+ */
+
+static void
+SanitizeDesktopName(char *name)
+{
+  char *out = name;
+  Bool prevBad = False;
+
+  for (; *name; name++) {
+    if ((unsigned char)*name >= 0x20 && (unsigned char)*name < 0x7F) {
+      *out++ = *name;
+      prevBad = False;
+      continue;
+    }
+    if (!prevBad)
+      *out++ = '?';
+    prevBad = True;
+  }
+  *out = '\0';
+}
+
+
+/*
  * InitialiseRFBConnection.
  */
 
@@ -358,6 +387,7 @@ InitialiseRFBConnection(void)
   if (!ReadFromRFBServer(desktopName, si.nameLength)) return False;
 
   desktopName[si.nameLength] = 0;
+  SanitizeDesktopName(desktopName);
 
   fprintf(stderr,"Desktop name \"%s\"\n",desktopName);
 
@@ -1249,6 +1279,7 @@ HandleDesktopName(void)
     return False;
   }
   name[nameLen] = '\0';
+  SanitizeDesktopName(name);
 
   free(desktopName);
   desktopName = name;
