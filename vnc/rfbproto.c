@@ -1364,13 +1364,8 @@ HandleRFBServerMessage()
 
       if (rect.encoding == rfbEncodingXCursor ||
 	  rect.encoding == rfbEncodingRichCursor) {
-	if (rect.r.w <= 0 || rect.r.h <= 0 ||
-	    rect.r.w > RFB_MAX_CURSOR_DIMENSION ||
-	    rect.r.h > RFB_MAX_CURSOR_DIMENSION) {
-	  fprintf(stderr, "Cursor shape too large: %dx%d\n",
-		  rect.r.w, rect.r.h);
-	  return False;
-	}
+	/* 0x0 is a valid "no cursor" shape, and HandleCursorShape() does the
+	   RFB_MAX_CURSOR_DIMENSION check itself */
 	if (!HandleCursorShape(rect.r.x, rect.r.y, rect.r.w, rect.r.h,
 			      rect.encoding)) {
 	  return False;

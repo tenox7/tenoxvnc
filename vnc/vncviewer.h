@@ -28,6 +28,10 @@
 #include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#ifdef _AIX
+#include <sys/select.h>	/* AIX keeps fd_set here, not in types.h/time.h */
+#include <strings.h>	/* FD_ZERO expands to bzero() */
+#endif
 #include <unistd.h>
 #include <pwd.h>
 #include <X11/IntrinsicP.h>
