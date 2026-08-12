@@ -22,6 +22,47 @@
  */
 
 #include <vncviewer.h>
+
+#ifdef __VMS
+
+/*
+ * Full-screen mode is not built on VMS.  Every part of it is written against
+ * the Athena widgets DECwindows does not have: it retargets the Form
+ * constraints of "viewport", drives Viewport's forceBars resource and its
+ * internal "clip" child, and bump scrolls with XawViewportSetCoordinates().
+ * The actions stay in the table in argsresources.c, so they have to remain
+ * defined - they just do nothing.
+ */
+
+void
+FullScreenOn()
+{
+  fprintf(stderr, "%s: full-screen mode is not available on OpenVMS\n",
+	  programName);
+  appData.fullScreen = False;
+}
+
+void FullScreenOff() { appData.fullScreen = False; }
+
+void
+ToggleFullScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
+{
+  FullScreenOn();
+}
+
+void
+SetFullScreenState(Widget w, XEvent *ev, String *params, Cardinal *num_params)
+{
+}
+
+Bool
+BumpScroll(XEvent *ev)
+{
+  return False;
+}
+
+#else /* !__VMS */
+
 #include <X11/Xaw/Form.h>
 #include <X11/Xaw/Viewport.h>
 #include <X11/Xaw/Toggle.h>
@@ -375,3 +416,5 @@ BumpScrollTimerCallback(XtPointer clientData, XtIntervalId *id)
 {
   DoBumpScroll();
 }
+
+#endif /* !__VMS */

@@ -24,6 +24,9 @@
 #include <vncviewer.h>
 #include <signal.h>
 #include <fcntl.h>
+#ifdef __VMS
+#include <lib$routines.h>	/* lib$wait - see Msleep below */
+#endif
 
 static void CleanupSignalHandler(int sig);
 static int CleanupXErrorHandler(Display *dpy, XErrorEvent *error);
@@ -294,13 +297,55 @@ Pause(Widget w, XEvent *event, String *params, Cardinal *num_params)
 void
 Msleep(int msec)
 {
+#ifdef __VMS
+  /* VMS has no usleep, and its select() ignores a timeout given with no
+     descriptors to watch - it returns 0 immediately with errno set. */
+  float seconds = (float)msec / 1000.0;
+
+  lib$wait(&seconds);
+#else
   struct timeval tv;
 
   tv.tv_sec = msec / 1000;
   tv.tv_usec = (msec % 1000) * 1000;
   select(0, NULL, NULL, NULL, &tv);
+#endif
 }
 
+
+#ifdef __VMS
+
+/*
+ * Run an arbitrary command.  VMS has no fork()/execvp(), so hand the
+ * arguments to DCL as one command line.
+ */
+void
+RunCommand(Widget w, XEvent *event, String *params, Cardinal *num_params)
+{
+  char cmd[1024];
+  Cardinal i;
+  size_t len = 0;
+
+  if (*num_params == 0)
+    return;
+
+  for (i = 0; i < *num_params; i++) {
+    size_t n = strlen(params[i]);
+
+    if (len + n + 2 > sizeof(cmd))
+      break;
+    if (len)
+      cmd[len++] = ' ';
+    memcpy(cmd + len, params[i], n);
+    len += n;
+  }
+  cmd[len] = '\0';
+
+  if (system(cmd) != 0)
+    fprintf(stderr, "%s: RunCommand failed: %s\n", programName, cmd);
+}
+
+#else /* !__VMS */
 
 /*
  * Run an arbitrary command via execvp()
@@ -353,6 +398,8 @@ RunCommand(Widget w, XEvent *event, String *params, Cardinal *num_params)
   
   return;
 }
+
+#endif /* !__VMS */
 
 
 /*

@@ -23,13 +23,34 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#ifndef __VMS		/* neither header exists on VMS, and nor does fork() */
 #include <sys/wait.h>
+#endif
 #include <sys/time.h>
+#ifndef __VMS
 #include <sys/utsname.h>
+#endif
 #include <vncviewer.h>
 
 Bool listenSpecified = False;
 int listenPort = 0;
+
+#ifdef __VMS
+
+/*
+ * Reverse connections need a process per incoming connection, and VMS has
+ * no fork() (nor wait3() to reap with), so -listen is not built there.
+ */
+
+void
+listenForIncomingConnections(int *argc, char **argv, int listenArgIndex)
+{
+  fprintf(stderr, "%s: -listen is not available on OpenVMS "
+	  "(it needs fork())\n", programName);
+  exit(1);
+}
+
+#else /* !__VMS */
 
 static Bool AllXEventsPredicate(Display *d, XEvent *ev, char *arg);
 
@@ -168,3 +189,5 @@ AllXEventsPredicate(Display *d, XEvent *ev, char *arg)
 {
   return True;
 }
+
+#endif /* !__VMS */

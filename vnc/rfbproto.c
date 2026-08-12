@@ -656,7 +656,11 @@ AuthenticateVNC(void)
   } else if (appData.passwordDialog) {
     passwd = DoPasswordDialog();
   } else {
+#ifdef __VMS
+    passwd = VmsPrompt("Password: ", False);	/* no getpass() in the CRTL */
+#else
     passwd = getpass("Password: ");
+#endif
   }
 
   if (!passwd || strlen(passwd) == 0) {

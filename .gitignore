@@ -1,0 +1,18 @@
+*.o
+# OpenVMS build products (VMS file versions appear as name.ext;N over NFS)
+*.obj
+*.obj;*
+*.lis
+*.lis;*
+*.map
+*.map;*
+*.olb
+*.olb;*
+*.exe
+*.exe;*
+build.log
+build.log;*
+cxx_repository
+# the VMS NFS client stores VMS file attributes in .$ADF$ companion files
+.$ADF$*
+.nfs.*

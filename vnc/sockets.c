@@ -29,6 +29,9 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
+#ifdef __VMS
+#include <sys/ioctl.h>	/* FIONBIO - see SetNonBlocking below */
+#endif
 #include <assert.h>
 #include <vncviewer.h>
 
@@ -55,6 +58,38 @@ static int buffered = 0;
  *    events are processed, as there is no XtAppMainLoop in the program.
  */
 
+#ifdef __VMS
+
+/*
+ * DECwindows Xt does not deliver XtAppAddInput() callbacks for socket
+ * descriptors - registering one succeeds and then never fires, so the
+ * loop below would block for ever.  select() does work on VMS sockets,
+ * so poll the socket and drain the X queue in between instead.
+ */
+
+#define VMS_POLL_MSEC 20
+
+static void
+ProcessXtEvents()
+{
+#ifdef VNCSTATS
+  double start = StatsTime();
+#endif
+
+  for (;;) {
+    while (XtAppPending(appContext))
+      XtAppProcessEvent(appContext, XtIMAll);
+
+    if (VmsSocketReady(rfbsock, VMS_POLL_MSEC))
+      break;
+  }
+
+  STATS(vncStats.sockWaits++);
+  STATS(vncStats.waitTime += StatsTime() - start);
+}
+
+#else /* !__VMS */
+
 static Bool rfbsockReady = False;
 static void
 rfbsockReadyCallback(XtPointer clientData, int *fd, XtInputId *id)
@@ -80,6 +115,8 @@ ProcessXtEvents()
   STATS(vncStats.sockWaits++);
   STATS(vncStats.waitTime += StatsTime() - start);
 }
+
+#endif /* !__VMS */
 
 Bool
 ReadFromRFBServer(char *out, unsigned int n)
@@ -366,11 +403,23 @@ AcceptTcpConnection(int listenSock)
 Bool
 SetNonBlocking(int sock)
 {
+#ifdef __VMS
+  /* VMS fcntl() accepts F_SETFL on a socket and returns -1 without setting
+     anything; FIONBIO is the way to do it there. */
+  int one = 1;
+
+  if (ioctl(sock, FIONBIO, &one) < 0) {
+    fprintf(stderr,programName);
+    perror(": AcceptTcpConnection: ioctl(FIONBIO)");
+    return False;
+  }
+#else
   if (fcntl(sock, F_SETFL, O_NONBLOCK) < 0) {
     fprintf(stderr,programName);
     perror(": AcceptTcpConnection: fcntl");
     return False;
   }
+#endif
   return True;
 }
 

@@ -22,8 +22,10 @@
  */
 
 #include <vncviewer.h>
+#ifndef __VMS		/* no Athena widget set on DECwindows - see vms.c */
 #include <X11/Xaw/Viewport.h>
 #include <X11/Xmu/Converters.h>
+#endif
 #include <X11/cursorfont.h>
 #ifdef MITSHM
 #include <X11/extensions/XShm.h>
@@ -76,6 +78,33 @@ DesktopInitBeforeRealization()
 {
   int i;
 
+#ifdef __VMS
+
+  /* No Athena Form or Viewport here, so both are plain composites: "form"
+     is the background and carries the scrollbars, "viewport" is the visible
+     area that clips "desktop".  vms.c does the geometry. */
+
+  form = XtVaCreateManagedWidget("form", compositeWidgetClass, toplevel,
+				 XtNborderWidth, 0,
+				 XtNwidth, si.framebufferWidth,
+				 XtNheight, si.framebufferHeight, NULL);
+
+  /* All three need a size up front: Xt refuses to realize a widget of zero
+     width or height, and VmsScrollInit() cannot lay them out until the
+     windows exist.  It corrects all of this straight after realization. */
+
+  viewport = XtVaCreateManagedWidget("viewport", compositeWidgetClass, form,
+				     XtNborderWidth, 0,
+				     XtNwidth, si.framebufferWidth,
+				     XtNheight, si.framebufferHeight, NULL);
+
+  desktop = XtVaCreateManagedWidget("desktop", coreWidgetClass, viewport,
+				    XtNborderWidth, 0,
+				    XtNwidth, si.framebufferWidth,
+				    XtNheight, si.framebufferHeight, NULL);
+
+#else
+
   form = XtVaCreateManagedWidget("form", formWidgetClass, toplevel,
 				 XtNborderWidth, 0,
 				 XtNdefaultDistance, 0, NULL);
@@ -90,6 +119,8 @@ DesktopInitBeforeRealization()
 
   XtVaSetValues(desktop, XtNwidth, si.framebufferWidth,
 		XtNheight, si.framebufferHeight, NULL);
+
+#endif
 
   XtAddEventHandler(desktop, LeaveWindowMask|ExposureMask,
 		    True, HandleBasicDesktopEvent, NULL);
@@ -178,6 +209,10 @@ DesktopInitAfterRealization()
   }
 
   XChangeWindowAttributes(dpy, desktopWin, valuemask, &attr);
+
+#ifdef __VMS
+  VmsScrollInit();		/* needs the windows to exist */
+#endif
 }
 
 
@@ -232,7 +267,12 @@ ResizeDesktopFramebuffer(int width, int height)
     XtVaSetValues(toplevel, XtNmaxWidth, width, XtNmaxHeight, height, NULL);
   }
 
+#ifdef __VMS
+  XtResizeWidget(desktop, width, height, 0);
+  VmsScrollResize();
+#else
   XtVaSetValues(desktop, XtNwidth, width, XtNheight, height, NULL);
+#endif
 
   if (!appData.fullScreen) {
     Dimension w = width, h = height;

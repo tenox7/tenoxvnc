@@ -1,0 +1,7 @@
+! Linker options for TenoxVNC on OpenVMS (DECwindows X11)
+SYS$SHARE:DECW$XLIBSHR.EXE/SHARE
+SYS$SHARE:DECW$XTLIBSHRR5.EXE/SHARE
+! Xmu: only XmuCvtStringToBackingStore and XmuConvertStandardSelection are
+! used, declared by vnc/vms.h since DECwindows ships no Xmu headers
+SYS$SHARE:DECW$XMULIBSHRR5.EXE/SHARE
+SYS$SHARE:DECW$XEXTLIBSHR.EXE/SHARE

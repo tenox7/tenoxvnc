@@ -23,11 +23,41 @@
 
 #include "vncviewer.h"
 
+Widget popup, fullScreenToggle;
+
+#ifdef __VMS
+
+/*
+ * The F8 menu is a Form of Athena Command and Toggle buttons, none of which
+ * DECwindows has, so there is no popup on VMS.  Nothing becomes unreachable:
+ * every entry in it is an Xt action, so it can still be bound to an event
+ * with -xrm, e.g.
+ *   -xrm '*desktop.baseTranslations: <Key>F5: RepaintScreen()'
+ */
+
+void
+CreatePopup()
+{
+  popup = NULL;
+}
+
+void
+ShowPopup(Widget w, XEvent *event, String *params, Cardinal *num_params)
+{
+  fprintf(stderr, "%s: the F8 menu is not available on OpenVMS\n",
+	  programName);
+}
+
+void
+HidePopup(Widget w, XEvent *event, String *params, Cardinal *num_params)
+{
+}
+
+#else /* !__VMS */
+
 #include <X11/Xaw/Form.h>
 #include <X11/Xaw/Command.h>
 #include <X11/Xaw/Toggle.h>
-
-Widget popup, fullScreenToggle;
 
 void
 ShowPopup(Widget w, XEvent *event, String *params, Cardinal *num_params)
@@ -91,3 +121,5 @@ CreatePopup()
     prevButton = button;
   }
 }
+
+#endif /* !__VMS */

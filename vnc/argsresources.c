@@ -432,6 +432,16 @@ GetArgsAndResources(int argc, char **argv)
   XtGetApplicationResources(toplevel, &appData, appDataResourceList,
 			    XtNumber(appDataResourceList), 0, 0);
 
+#ifdef __VMS
+  /* Neither is built on VMS - see popup.c and fullscreen.c */
+  if (appData.fullScreen) {
+    fprintf(stderr, "%s: -fullscreen is not available on OpenVMS, ignoring\n",
+	    programName);
+    appData.fullScreen = False;
+  }
+  appData.popupButtonCount = 0;
+#endif
+
   /* Add our actions to the actions table so they can be used in widget
      resource specs */
 

@@ -22,6 +22,47 @@
  */
 
 #include "vncviewer.h"
+
+#ifdef __VMS
+
+/*
+ * An Athena Dialog is a label plus an asciiText value field, and DECwindows
+ * has neither, so on VMS both prompts are read from the terminal instead.
+ * The two "done" actions stay in the table in argsresources.c and are no-ops.
+ */
+
+void
+ServerDialogDone(Widget w, XEvent *event, String *params, Cardinal *num_params)
+{
+}
+
+void
+PasswordDialogDone(Widget w, XEvent *event, String *params,
+		   Cardinal *num_params)
+{
+}
+
+char *
+DoServerDialog()
+{
+  char *name = VmsPrompt("VNC server: ", True);
+
+  if (!name || !name[0]) {
+    fprintf(stderr, "%s: no VNC server given\n", programName);
+    exit(1);
+  }
+
+  return XtNewString(name);
+}
+
+char *
+DoPasswordDialog()
+{
+  return VmsPrompt("Password: ", False);
+}
+
+#else /* !__VMS */
+
 #include <X11/Xaw/Dialog.h>
 
 static Bool serverDialogDone = False;
@@ -97,3 +138,5 @@ DoPasswordDialog()
   XtPopdown(pshell);
   return password;
 }
+
+#endif /* !__VMS */
