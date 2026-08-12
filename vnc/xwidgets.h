@@ -38,6 +38,7 @@ enum {				/* item kinds */
   XW_TEXT,
   XW_CHECK,
   XW_BUTTON,
+  XW_SLIDER,
   XW_SEP
 };
 
@@ -54,7 +55,16 @@ typedef struct {
 
   Bool *flag;			/* XW_CHECK, when it tracks a variable */
   Bool state;			/* XW_CHECK, when the owner sets it */
-  Bool disabled;
+  Bool disabled;		/* fixed when the panel is built */
+  Bool *enableIf;		/* live only while this is set: a slider that
+				   only means something when its checkbox is
+				   ticked greys itself out when it is not */
+
+  int *num;			/* XW_SLIDER: the value being set */
+  const int *vals;		/* the notches, in order */
+  int nvals;
+  Bool autoFirst;		/* vals[0] is "let the viewer decide" */
+  int valW;			/* room kept at the right for the value */
 
   int id;			/* XW_BUTTON and XW_CHECK: result code */
 } XwItem;
@@ -71,6 +81,7 @@ typedef struct {
   int focus;
 
   int result;			/* id of whatever was activated */
+  int drag;			/* slider being dragged, -1 for none */
   Bool done;
   const char *message;		/* shown in red across the top */
   Bool modal;
@@ -89,6 +100,8 @@ extern unsigned long xwBg, xwFg, xwField, xwDark, xwLight, xwWarn;
 
 extern Bool XwInit(void);
 
+extern Bool XwLive(XwItem *it);
+
 extern int XwStrW(const char *s);
 extern int XwCheckW(const char *s);
 
@@ -99,6 +112,8 @@ extern XwItem *XwAddText(XwPanel *p, char *buf, int maxlen, int x, int y,
 extern XwItem *XwAddCheck(XwPanel *p, const char *s, Bool *flag, int id,
 			  int x, int y);
 extern XwItem *XwAddButton(XwPanel *p, const char *s, int id, int x, int y);
+extern XwItem *XwAddSlider(XwPanel *p, int *value, const int *vals, int nvals,
+			   Bool autoFirst, int x, int y, int w);
 extern XwItem *XwAddSep(XwPanel *p, int x, int y, int w);
 extern int XwContentWidth(XwPanel *p);
 

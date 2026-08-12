@@ -32,7 +32,6 @@
 
 #define HOST_LEN	255
 #define PASS_LEN	63
-#define NUM_LEN		3
 
 enum { RES_CONNECT = 1, RES_CANCEL = 2 };
 
@@ -43,8 +42,15 @@ static char dlgHost[HOST_LEN + 1];
 static char dlgPass[PASS_LEN + 1];
 Bool connectDialogUsed = False;
 
-static char numDepth[NUM_LEN + 1], numQuality[NUM_LEN + 1];
-static char numCompress[NUM_LEN + 1];
+/* The notches on the three sliders.  Depth has to be one the X server can
+   really give us, so the list is the true colour depths rather than a range.
+   The first entry of the other two is the unset one: depth 0 means any depth
+   will do and compression level -1 asks the server for nothing, leaving the
+   viewer to pick.  JPEG quality has no unset - out of range means 5 - so it
+   runs 0 to 9 and says so. */
+static const int depthVals[] = { 0, 8, 15, 16, 24, 32 };
+static const int qualityVals[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+static const int levelVals[] = { -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 
 
 /*
@@ -70,41 +76,14 @@ Max4(int a, int b, int c, int d)
   return a;
 }
 
-/*
- * Numeric option fields are text so that "unset" can be an empty box: depth
- * 0 and compression level -1 both mean "let the viewer decide".
- */
-
-static void
-NumToText(char *buf, int value, int unset)
-{
-  if (value == unset)
-    buf[0] = '\0';
-  else
-    sprintf(buf, "%d", value);
-}
-
-static int
-TextToNum(const char *buf, int unset, int lo, int hi)
-{
-  int v;
-
-  if (buf[0] == '\0')
-    return unset;
-  v = atoi(buf);
-  if (v < lo || v > hi)
-    return unset;
-  return v;
-}
-
-
 static void
 DlgBuild(Bool withOptions)
 {
   int pad = xwCharW * 2;
   int col1 = pad + XwStrW("Password:") + xwCharW;
-  int col2, numX, y, rowH = xwLineH + 6;
+  int col2, y, rowH = xwLineH + 6;
   int fieldCols = 26;
+  int slider[3], i;
 
   XwReset(&dlg);
   passItem = -1;
@@ -130,8 +109,6 @@ DlgBuild(Bool withOptions)
     col2 = col1 + Max4(XwCheckW("Shared"), XwCheckW("BGR233"),
 		       XwCheckW("Own colormap"), XwCheckW("JPEG"))
 	   + xwCharW * 2;
-    numX = col2 + Max4(XwStrW("Depth:"), XwStrW("Quality:"),
-		       XwStrW("Compress:"), 0) + xwCharW;
 
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Session:", pad, y);
@@ -145,24 +122,39 @@ DlgBuild(Bool withOptions)
 	       0, col1, y);
     y += rowH;
 
+    /* Each slider sits under the section it belongs to, and the two that
+       only mean something with their checkbox ticked say so by grey.  The
+       sliders are stretched to the finished width further down, the same way
+       the F8 menu handles its separators. */
+
+    y += xwLineH / 2;
+    XwAddLabel(&dlg, "Encoding:", pad, y);
+    XwAddCheck(&dlg, "JPEG", &appData.enableJPEG, 0, col1, y);
+    y += rowH;
+    XwAddLabel(&dlg, "Quality", pad, y + 1)->enableIf = &appData.enableJPEG;
+    slider[0] = dlg.nItems;
+    XwAddSlider(&dlg, &appData.qualityLevel, qualityVals,
+		XtNumber(qualityVals), False, col1, y, 1);
+    dlg.items[slider[0]].enableIf = &appData.enableJPEG;
+    y += rowH + 3;
+    XwAddLabel(&dlg, "Compress", pad, y + 1);
+    slider[1] = dlg.nItems;
+    XwAddSlider(&dlg, &appData.compressLevel, levelVals,
+		XtNumber(levelVals), True, col1, y, 1);
+    y += rowH;
+
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Colour:", pad, y);
     XwAddCheck(&dlg, "BGR233", &appData.useBGR233, 0, col1, y);
     XwAddCheck(&dlg, "True colour", &appData.forceTrueColour, 0, col2, y);
     y += rowH;
     XwAddCheck(&dlg, "Own colormap", &appData.forceOwnCmap, 0, col1, y);
-    XwAddLabel(&dlg, "Depth:", col2, y);
-    XwAddText(&dlg, numDepth, NUM_LEN, numX, y - 2, 3, False, True);
     y += rowH;
-
-    y += xwLineH / 2;
-    XwAddLabel(&dlg, "Encoding:", pad, y);
-    XwAddCheck(&dlg, "JPEG", &appData.enableJPEG, 0, col1, y);
-    XwAddLabel(&dlg, "Quality:", col2, y);
-    XwAddText(&dlg, numQuality, NUM_LEN, numX, y - 2, 3, False, True);
-    y += rowH;
-    XwAddLabel(&dlg, "Compress:", col2, y);
-    XwAddText(&dlg, numCompress, NUM_LEN, numX, y - 2, 3, False, True);
+    XwAddLabel(&dlg, "Depth", pad, y + 1)->enableIf = &appData.forceTrueColour;
+    slider[2] = dlg.nItems;
+    XwAddSlider(&dlg, &appData.requestedDepth, depthVals,
+		XtNumber(depthVals), True, col1, y, 1);
+    dlg.items[slider[2]].enableIf = &appData.forceTrueColour;
     y += rowH;
   }
 
@@ -184,6 +176,10 @@ DlgBuild(Bool withOptions)
     y += xwLineH + 6;
   }
 
+  if (withOptions)
+    for (i = 0; i < 3; i++)
+      dlg.items[slider[i]].w = dlg.w - pad - col1;
+
   dlg.h = y + pad;
 
   /* A message means something went wrong with what was typed last time,
@@ -201,10 +197,6 @@ DlgRun(Bool withOptions, const char *title, const char *message)
   if (!XwInit())
     return RES_CANCEL;
 
-  NumToText(numDepth, appData.requestedDepth, 0);
-  NumToText(numQuality, appData.qualityLevel, -1);
-  NumToText(numCompress, appData.compressLevel, -1);
-
   dlg.message = message;
   DlgBuild(withOptions);
 
@@ -215,12 +207,6 @@ DlgRun(Bool withOptions, const char *title, const char *message)
   res = XwRunModal(&dlg);
   if (res != RES_CONNECT)
     res = RES_CANCEL;
-
-  if (res == RES_CONNECT && withOptions) {
-    appData.requestedDepth = TextToNum(numDepth, 0, 1, 32);
-    appData.qualityLevel = TextToNum(numQuality, -1, 0, 9);
-    appData.compressLevel = TextToNum(numCompress, -1, 0, 9);
-  }
 
   XwPopdown(&dlg);
   XwDestroy(&dlg);

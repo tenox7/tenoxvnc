@@ -188,6 +188,83 @@ XwAddButton(XwPanel *p, const char *s, int id, int x, int y)
   return it;
 }
 
+/*
+ * A slider picks one of a fixed list of values, which is what the numeric
+ * options actually are: depth has to be a depth the X server really has, and
+ * the two levels run 0 to 9.  The first notch may be the unset one - depth 0
+ * or compression level -1 - and is drawn as "auto", since a blank field says
+ * nothing about what the viewer will do when it is left alone.
+ *
+ * The value itself is drawn at the right end and the room for it is kept
+ * back from the track, so the thumb has the same travel whatever is showing.
+ */
+
+/* the groove sits under the top of the thumb, the notches below both */
+#define XW_SLIDER_GROOVE	5
+#define XW_SLIDER_THUMB		(xwLineH - 2)
+
+static int
+XwThumbW(void)
+{
+  return xwCharW + 2;
+}
+
+static void
+XwSliderText(XwItem *it, char *out, int val)
+{
+  if (it->autoFirst && val == it->vals[0])
+    strcpy(out, "auto");
+  else
+    sprintf(out, "%d", val);
+}
+
+/* left edge of the thumb when it sits on notch i */
+static int
+XwSliderX(XwItem *it, int i)
+{
+  int travel = it->w - it->valW - xwCharW - XwThumbW();
+
+  if (it->nvals < 2 || travel < 1)
+    return it->x;
+
+  return it->x + i * travel / (it->nvals - 1);
+}
+
+/* which notch the value is on; one we do not offer reads as the first */
+static int
+XwSliderIndex(XwItem *it)
+{
+  int i;
+
+  for (i = 0; i < it->nvals; i++)
+    if (it->vals[i] == *it->num)
+      return i;
+
+  return 0;
+}
+
+XwItem *
+XwAddSlider(XwPanel *p, int *value, const int *vals, int nvals, Bool autoFirst,
+	    int x, int y, int w)
+{
+  XwItem *it = XwAdd(p, XW_SLIDER, NULL, x, y, w, xwLineH + 6);
+  char text[24];
+  int i;
+
+  it->num = value;
+  it->vals = vals;
+  it->nvals = nvals;
+  it->autoFirst = autoFirst;
+
+  for (i = 0; i < nvals; i++) {
+    XwSliderText(it, text, vals[i]);
+    if (XwStrW(text) > it->valW)
+      it->valW = XwStrW(text);
+  }
+
+  return it;
+}
+
 XwItem *
 XwAddSep(XwPanel *p, int x, int y, int w)
 {
@@ -204,6 +281,19 @@ XwContentWidth(XwPanel *p)
       cw = p->items[i].x + p->items[i].w;
 
   return cw;
+}
+
+
+/*
+ * Whether an item can be used at all.  disabled is settled when the panel is
+ * built; enableIf is looked at every time, so a control that only means
+ * something while a checkbox is ticked greys itself out the moment it is not.
+ */
+
+Bool
+XwLive(XwItem *it)
+{
+  return !it->disabled && (!it->enableIf || *it->enableIf);
 }
 
 
@@ -226,16 +316,16 @@ static void
 XwDrawItem(XwPanel *p, int i)
 {
   XwItem *it = &p->items[i];
-  int tx, ty, n, boxY, box;
+  int tx, ty, n, boxY, box, k, trackW, groove;
   const char *s;
-  char stars[64];
+  char stars[64], slider[24];
 
   ty = it->y + xwFont->ascent;
 
   switch (it->kind) {
 
   case XW_LABEL:
-    XSetForeground(dpy, p->gc, it->disabled ? xwDark : xwFg);
+    XSetForeground(dpy, p->gc, XwLive(it) ? xwFg : xwDark);
     XDrawString(dpy, p->buf, p->gc, it->x, ty, it->label, strlen(it->label));
     break;
 
@@ -281,7 +371,7 @@ XwDrawItem(XwPanel *p, int i)
     XwFrame(p, it->x, boxY, box, box, True);
 
     if (it->flag ? *it->flag : it->state) {
-      XSetForeground(dpy, p->gc, it->disabled ? xwDark : xwFg);
+      XSetForeground(dpy, p->gc, XwLive(it) ? xwFg : xwDark);
       XDrawLine(dpy, p->buf, p->gc, it->x + 3, boxY + box / 2,
 		it->x + box / 2 - 1, boxY + box - 4);
       XDrawLine(dpy, p->buf, p->gc, it->x + 3, boxY + box / 2 - 1,
@@ -292,7 +382,7 @@ XwDrawItem(XwPanel *p, int i)
 		it->x + box - 3, boxY + 2);
     }
 
-    XSetForeground(dpy, p->gc, it->disabled ? xwDark : xwFg);
+    XSetForeground(dpy, p->gc, XwLive(it) ? xwFg : xwDark);
     XDrawString(dpy, p->buf, p->gc, it->x + box + 6, ty,
 		it->label, strlen(it->label));
 
@@ -305,13 +395,45 @@ XwDrawItem(XwPanel *p, int i)
     XSetForeground(dpy, p->gc, xwBg);
     XFillRectangle(dpy, p->buf, p->gc, it->x, it->y, it->w, it->h);
     XwFrame(p, it->x, it->y, it->w, it->h, False);
-    XSetForeground(dpy, p->gc, it->disabled ? xwDark : xwFg);
+    XSetForeground(dpy, p->gc, XwLive(it) ? xwFg : xwDark);
     tx = it->x + (it->w - XwStrW(it->label)) / 2;
     XDrawString(dpy, p->buf, p->gc, tx, it->y + 3 + xwFont->ascent,
 		it->label, strlen(it->label));
     if (i == p->focus)
       XDrawRectangle(dpy, p->buf, p->gc, it->x + 2, it->y + 2,
 		     it->w - 5, it->h - 5);
+    break;
+
+  case XW_SLIDER:
+    /* groove across the top, the thumb riding over it, and the notches
+       marked underneath where the thumb cannot cover them */
+    trackW = it->w - it->valW - xwCharW;
+    groove = it->y + XW_SLIDER_GROOVE;
+
+    /* an empty groove is the clearest sign the slider is not in play */
+    XSetForeground(dpy, p->gc, XwLive(it) ? xwField : xwBg);
+    XFillRectangle(dpy, p->buf, p->gc, it->x, groove, trackW, 4);
+    XwFrame(p, it->x, groove, trackW, 4, True);
+
+    XSetForeground(dpy, p->gc, xwDark);
+    for (k = 0; k < it->nvals; k++) {
+      tx = XwSliderX(it, k) + XwThumbW() / 2;
+      XDrawLine(dpy, p->buf, p->gc, tx, it->y + XW_SLIDER_THUMB + 2,
+		tx, it->y + XW_SLIDER_THUMB + 4);
+    }
+
+    tx = XwSliderX(it, XwSliderIndex(it));
+    XSetForeground(dpy, p->gc, xwBg);
+    XFillRectangle(dpy, p->buf, p->gc, tx, it->y, XwThumbW(), XW_SLIDER_THUMB);
+    XwFrame(p, tx, it->y, XwThumbW(), XW_SLIDER_THUMB, False);
+    if (i == p->focus)
+      XDrawRectangle(dpy, p->buf, p->gc, tx + 2, it->y + 2,
+		     XwThumbW() - 5, XW_SLIDER_THUMB - 5);
+
+    XwSliderText(it, slider, *it->num);
+    XSetForeground(dpy, p->gc, XwLive(it) ? xwFg : xwDark);
+    XDrawString(dpy, p->buf, p->gc, it->x + it->w - XwStrW(slider),
+		groove + 2 + xwFont->ascent / 2, slider, strlen(slider));
     break;
   }
 }
@@ -350,8 +472,8 @@ XwFocusable(XwPanel *p, int i)
 {
   int k = p->items[i].kind;
 
-  return !p->items[i].disabled &&
-	 (k == XW_TEXT || k == XW_CHECK || k == XW_BUTTON);
+  return XwLive(&p->items[i]) &&
+	 (k == XW_TEXT || k == XW_CHECK || k == XW_BUTTON || k == XW_SLIDER);
 }
 
 static void
@@ -390,17 +512,20 @@ XwHit(XwPanel *p, int x, int y)
 
 
 /*
- * An option checkbox has no id: the panel owns it, so it toggles in place
- * and never finishes the dialog.  A checkbox with an id is a menu entry,
- * and its owner does the work in the activate callback.
+ * An option control has no id: the panel owns it, so it acts in place and
+ * never finishes the dialog.  One with an id is a menu entry, and its owner
+ * does the work in the activate callback.
  */
 
 static Bool
-XwToggleCheck(XwPanel *p, int i)
+XwPanelAction(XwPanel *p, int i)
 {
   XwItem *it = &p->items[i];
 
-  if (it->kind != XW_CHECK || it->id)
+  if (it->id)
+    return False;
+
+  if (it->kind != XW_CHECK)
     return False;
 
   it->state = !(it->flag ? *it->flag : it->state);
@@ -409,6 +534,48 @@ XwToggleCheck(XwPanel *p, int i)
 
   XwRedraw(p);
   return True;
+}
+
+
+/*
+ * Sliders: set from a pointer position, or step a notch at a time from the
+ * keyboard.  Both are panel business, so neither finishes the dialog.
+ */
+
+static void
+XwSliderSet(XwPanel *p, XwItem *it, int x)
+{
+  int travel = it->w - it->valW - xwCharW - XwThumbW();
+  int i;
+
+  if (it->nvals < 2 || travel < 1)
+    return;
+
+  x -= it->x + XwThumbW() / 2;
+  if (x < 0)
+    x = 0;
+
+  i = (x * (it->nvals - 1) + travel / 2) / travel;
+  if (i >= it->nvals)
+    i = it->nvals - 1;
+
+  if (*it->num == it->vals[i])
+    return;
+
+  *it->num = it->vals[i];
+  XwRedraw(p);
+}
+
+static void
+XwSliderStep(XwPanel *p, XwItem *it, int dir)
+{
+  int i = XwSliderIndex(it) + dir;
+
+  if (i < 0 || i >= it->nvals)
+    return;
+
+  *it->num = it->vals[i];
+  XwRedraw(p);
 }
 
 
@@ -437,6 +604,11 @@ XwKey(XwPanel *p, XKeyEvent *ev)
   KeySym ks;
   int n, i, len;
   XwItem *it = p->focus >= 0 ? &p->items[p->focus] : NULL;
+
+  /* what had the focus may have been greyed out since, by a checkbox it
+     hangs off being unticked */
+  if (it && !XwLive(it))
+    it = NULL;
 
   n = XLookupString(ev, text, sizeof(text) - 1, &ks, NULL);
 
@@ -481,9 +653,17 @@ XwKey(XwPanel *p, XKeyEvent *ev)
       p->done = True;
     return;
 
+  case XK_Left:
+  case XK_Right:
+    if (it && it->kind == XW_SLIDER && !it->id) {
+      XwSliderStep(p, it, ks == XK_Right ? 1 : -1);
+      return;
+    }
+    break;			/* in a text field an arrow moves the caret */
+
   case XK_space:
     if (it && (it->kind == XW_CHECK || it->kind == XW_BUTTON)) {
-      if (XwToggleCheck(p, p->focus))
+      if (XwPanelAction(p, p->focus))
 	return;
       p->result = it->id;
       if (!p->modal && p->activate)
@@ -581,7 +761,14 @@ XwEvent(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
       return;
     }
 
-    if (XwToggleCheck(p, hit))
+    if (p->items[hit].kind == XW_SLIDER && !p->items[hit].id) {
+      p->drag = hit;
+      XwSliderSet(p, &p->items[hit], ev->xbutton.x);
+      XwRedraw(p);		/* the focus ring moved even if the value did not */
+      return;
+    }
+
+    if (XwPanelAction(p, hit))
       return;
 
     p->result = p->items[hit].id;
@@ -592,6 +779,15 @@ XwEvent(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
       p->done = True;
       XwRedraw(p);
     }
+    return;
+
+  case MotionNotify:
+    if (p->drag >= 0)
+      XwSliderSet(p, &p->items[p->drag], ev->xmotion.x);
+    return;
+
+  case ButtonRelease:
+    p->drag = -1;
     return;
 
   case KeyPress:
@@ -639,8 +835,11 @@ XwBuildWindow(XwPanel *p, const char *name, const char *title, int w, int h,
 				      XtNborderWidth, 0,
 				      NULL);
 
+  p->drag = -1;
+
   XtAddEventHandler(p->canvas,
-		    ExposureMask | ButtonPressMask | KeyPressMask,
+		    ExposureMask | ButtonPressMask | ButtonReleaseMask |
+		    Button1MotionMask | KeyPressMask,
 		    False, XwEvent, (XtPointer)p);
 
   XtRealizeWidget(p->shell);
