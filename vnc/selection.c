@@ -302,9 +302,7 @@ ConvertSelection(Widget w, Atom* selection, Atom* target, Atom* type,
     return True;
   }
 
-  /* The standard targets used to come from XmuConvertStandardSelection.
-     Answering the two that matter directly is shorter than the wrapping the
-     Xmu call needed, and means the viewer does not link -lXmu at all. */
+  /* the standard targets */
 
   if (*target == XInternAtom(dpy, "TARGETS", False)) {
     Atom *targets = (Atom *)XtMalloc(sizeof(Atom) * 3);

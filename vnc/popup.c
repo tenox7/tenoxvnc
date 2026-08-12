@@ -21,9 +21,7 @@
 /*
  * popup.c - the F8 menu, drawn with xwidgets.
  *
- * This used to be a column of Athena Command and Toggle widgets built from
- * resources, one per entry.  It is now a panel the viewer draws itself, with
- * a fixed set of entries: the two things that can be on or off are
+ * A panel the viewer draws itself: the two things that can be on or off are
  * checkboxes showing the real state, the rest are buttons.
  *
  * Everything here still goes through the Xt actions in the table in
@@ -69,9 +67,8 @@ static Bool fsState, cuState;
 
 /*
  * Run one of the viewer's actions by name.  The action procedures take a
- * widget, which only the old Athena buttons ever used (to set their own
- * label or state); the ones reached from here ignore it, and are given the
- * desktop widget so that anything looking at XtDisplay/XtScreen still works.
+ * widget, which the ones reached from here ignore; they are given the
+ * desktop widget so anything looking at XtDisplay/XtScreen still works.
  */
 
 static void

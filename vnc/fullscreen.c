@@ -25,12 +25,6 @@
  * alone, and sized to the whole display.  scroll.c then gives the entire
  * area to the desktop with no scrollbars, and bump scrolling moves it when
  * the desktop is bigger than the screen.
- *
- * The old version of this file was written against the Athena Viewport: it
- * drove the widget's forceBars resource, reached into its private "clip"
- * child to measure the scrollbars, and re-targeted Form constraints to move
- * the viewport about.  Owning the scrolling outright makes all of that go
- * away - full screen is now just a resize plus ScrollTo().
  */
 
 #include <vncviewer.h>
@@ -125,10 +119,9 @@ ToggleFullScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
 
 /*
- * SetFullScreenState was an action which set the "state" resource of an
- * Athena toggle to match.  The F8 menu draws its own checkbox from
- * appData.fullScreen now, so this only does anything if someone has bound it
- * to a widget that has a state resource.
+ * SetFullScreenState sets the "state" resource of the widget it is given to
+ * match.  The F8 menu draws its own checkbox from appData.fullScreen, so
+ * this is only useful if bound to a widget that has a state resource.
  */
 
 void

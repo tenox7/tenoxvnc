@@ -1,6 +1,4 @@
 ! Linker options for TenoxVNC on OpenVMS (DECwindows X11)
-! The viewer draws its own controls, so it needs no widget set beyond Xt:
-! no Xaw (DECwindows has none at all) and no Xmu.
 SYS$SHARE:DECW$XLIBSHR.EXE/SHARE
 SYS$SHARE:DECW$XTLIBSHRR5.EXE/SHARE
 SYS$SHARE:DECW$XEXTLIBSHR.EXE/SHARE

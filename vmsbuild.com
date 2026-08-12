@@ -2,9 +2,7 @@ $! TenoxVNC build procedure for OpenVMS (DECwindows X11)
 $!
 $! Tested on VAX/VMS V7.3 with Compaq C V6.4 and DECwindows Motif.
 $!
-$! DECwindows has no Athena widget set, and the viewer no longer wants one:
-$! it draws its own dialog, F8 menu and scrollbars with Xlib, so this links
-$! against nothing but Xlib, Xt and Xext.  MIT-SHM is not defined either -
+$! Links against nothing but Xlib, Xt and Xext.  MIT-SHM is not defined:
 $! there is no System V shared memory on VMS.
 $!
 $! The sources are copied to a work directory on a local disk and built

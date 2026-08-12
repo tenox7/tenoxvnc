@@ -57,9 +57,7 @@ static void ResizeTimerCallback(XtPointer clientData, XtIntervalId *id);
 static void ScheduleRemoteResize(int width, int height);
 
 /*
- * The backingStore resource and its string converter used to come from Xmu.
- * They are twenty lines, and having them here means the viewer does not need
- * -lXmu at all - which matters on systems that do not ship it.
+ * The backingStore resource and the string converter for it.
  */
 
 #define XtNbackingStore "backingStore"
@@ -108,9 +106,8 @@ DesktopInitBeforeRealization()
 {
   int i;
 
-  /* Plain composites, not Athena Form and Viewport: "form" is the
-     background and carries the scrollbars, "viewport" is the visible area
-     that clips "desktop".  scroll.c does the geometry.
+  /* "form" is the background and carries the scrollbars, "viewport" is the
+     visible area that clips "desktop".  scroll.c does the geometry.
 
      All three need a size up front - Xt refuses to realize a widget of zero
      width or height, and ScrollInit() cannot lay them out until the windows
@@ -604,10 +601,10 @@ LocalCursorName(void)
 
 
 /*
- * SetLocalCursorState was an action which put the current cursor mode into
- * the label of an Athena popup menu button.  The menu draws its own label
- * from LocalCursorName() now, so this only does anything if someone has
- * bound it to a widget that has a label resource.
+ * SetLocalCursorState puts the current cursor mode into the label of the
+ * widget it is given.  The F8 menu draws its own label from
+ * LocalCursorName(), so this is only useful if bound to a widget that has a
+ * label resource.
  */
 
 void

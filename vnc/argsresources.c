@@ -46,14 +46,7 @@ char *fallback_resources[] = {
      <KeyPress>: SendRFBEvent()\\n\
      <KeyRelease>: SendRFBEvent()",
 
-  /* The connection dialog is drawn with Xlib in dialogs.c and has no widget
-     resources of its own; the Athena serverDialog/passwordDialog specs that
-     used to be here are gone with it. */
-
-  /* The F8 menu is drawn by popup.c and has no widget resources of its own.
-     The one thing still worth setting is what the window manager close
-     button does to it. */
-
+  /* what the window manager close button does to the F8 menu */
   "*popup.translations: #override <Message>WM_PROTOCOLS: HidePopup()",
 
 #ifdef VNCSTATS

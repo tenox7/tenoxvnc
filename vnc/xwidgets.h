@@ -22,9 +22,7 @@
  *
  * Enough of a toolkit for the connection dialog and the F8 menu: labels,
  * text fields, checkboxes, buttons and separators, drawn with Xlib on a bare
- * Xt core widget.  This is what lets the viewer do without the Athena widget
- * set, which is not available everywhere - DECwindows on OpenVMS has Xlib,
- * Xt and Xext but no Xaw at all.
+ * Xt core widget, so the viewer needs nothing beyond Xt itself.
  *
  * A panel owns its items, so the F8 menu can stay around between uses while
  * a modal dialog comes and goes.

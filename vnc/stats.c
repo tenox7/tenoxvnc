@@ -23,7 +23,7 @@
  *
  * Counters are bumped from the socket, protocol and decoder layers into the
  * global vncStats.  The window is a separate top-level shell holding a plain
- * core widget which we draw ourselves with Xlib (no Xaw beyond what the rest
+ * core widget which we draw ourselves with Xlib (nothing beyond what the rest
  * of the viewer already uses), double buffered through a pixmap.  It has four
  * pages, everything is redrawn from scratch on a timer, so nothing here can
  * get out of sync with the counters.

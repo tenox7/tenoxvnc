@@ -20,16 +20,12 @@
 /*
  * scroll.c - scrolling for desktops bigger than the window.
  *
- * This does the job the Athena Viewport widget used to do, with plain Xt:
  * "viewport" is the visible area, the framebuffer-sized "desktop" window is
  * its child and is moved to negative offsets to scroll it, and the
  * scrollbars are drawn with Xlib into the parent "form".  The desktop window
  * stays exactly framebuffer-sized throughout, so the decoders keep blitting
  * with source and destination coordinates equal and never learn any of this
  * is here.
- *
- * Written for OpenVMS, where DECwindows has no Athena widgets at all, and
- * then used everywhere - it is the last thing that tied the viewer to Xaw.
  *
  * Full-screen mode turns the scrollbars off and drives the position through
  * ScrollTo() instead, which is what bump scrolling does.

@@ -49,8 +49,7 @@ static char numCompress[NUM_LEN + 1];
 
 /*
  * These two are still named in the actions table in argsresources.c.  The
- * Athena dialogs used them to notice Return in a text field; this dialog
- * handles its own keys, so they do nothing.
+ * dialog handles its own keys, so they do nothing.
  */
 
 void

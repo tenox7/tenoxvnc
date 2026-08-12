@@ -20,9 +20,8 @@
 /*
  * vms.h - OpenVMS declarations, included from vncviewer.h.
  *
- * Only the C runtime differences are left here.  The viewer no longer uses
- * Xaw or Xmu, so VMS needs nothing special for the user interface any more:
- * DECwindows supplies the Xlib and Xt that everything is now built on.
+ * Only the C runtime differences are left here: DECwindows supplies the
+ * Xlib and Xt that everything else is built on.
  */
 
 #ifndef VMS_H
