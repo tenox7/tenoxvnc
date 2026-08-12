@@ -73,7 +73,11 @@ char *fallback_resources[] = {
   "*popup.buttonForm.translations: #override\\n\
      <KeyPress>: SendRFBEvent() HidePopup()",
 
+#ifdef VNCSTATS
+  "*popupButtonCount: 12",
+#else
   "*popupButtonCount: 11",
+#endif
 
   "*popup*button1.label: Dismiss popup",
   "*popup*button1.translations: #override\\n\
@@ -128,6 +132,36 @@ char *fallback_resources[] = {
   "*popup*button11.translations: #override\\n\
      <Visible>: SetLocalCursorState()\\n\
      <Btn1Down>,<Btn1Up>: CycleLocalCursor()",
+
+#ifdef VNCSTATS
+  "*popup*button12.label: Diagnostics...",
+  "*popup*button12.translations: #override\\n\
+     <Btn1Down>,<Btn1Up>: ShowStats() HidePopup()",
+
+  "*statsShell.title: TenoxVNC diagnostics",
+  "*statsShell.iconName: TenoxVNC diagnostics",
+  "*statsShell.translations: #override\\n\
+     <Message>WM_PROTOCOLS: HideStats()\\n\
+     <Key>q: HideStats()\\n\
+     <Key>Escape: HideStats()\\n\
+     <Key>r: ResetStats()\\n\
+     <Key>p: PauseStats()\\n\
+     <Key>Tab: StatsPage()\\n\
+     <Key>1: StatsPage(1)\\n\
+     <Key>2: StatsPage(2)\\n\
+     <Key>3: StatsPage(3)\\n\
+     <Key>4: StatsPage(4)",
+  "*statsCanvas.translations: #override\\n\
+     <Key>q: HideStats()\\n\
+     <Key>Escape: HideStats()\\n\
+     <Key>r: ResetStats()\\n\
+     <Key>p: PauseStats()\\n\
+     <Key>Tab: StatsPage()\\n\
+     <Key>1: StatsPage(1)\\n\
+     <Key>2: StatsPage(2)\\n\
+     <Key>3: StatsPage(3)\\n\
+     <Key>4: StatsPage(4)",
+#endif
 
   NULL
 };
@@ -298,6 +332,13 @@ static XtActionsRec actions[] = {
     {"RepaintScreen", RepaintScreen},
     {"CycleLocalCursor", CycleLocalCursor},
     {"SetLocalCursorState", SetLocalCursorState},
+#ifdef VNCSTATS
+    {"ShowStats", ShowStats},
+    {"HideStats", HideStats},
+    {"ResetStats", ResetStats},
+    {"PauseStats", PauseStats},
+    {"StatsPage", StatsPage},
+#endif
     {"SelectionFromVNC", SelectionFromVNC},
     {"SelectionToVNC", SelectionToVNC},
     {"ServerDialogDone", ServerDialogDone},

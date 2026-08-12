@@ -256,6 +256,9 @@ extern char titleEncName[];
 
 extern Bool supportsSetDesktopSize;
 extern Bool pendingDesktopResize;
+extern Bool supportsFence;
+extern Bool supportsCU;
+extern Bool cuActive;
 
 extern Bool ConnectToRFBServer(const char *hostname, int port);
 extern Bool InitialiseRFBConnection();
@@ -277,6 +280,145 @@ extern Bool SendFence(CARD32 flags, int len, char *data);
 extern Bool HandleRFBServerMessage();
 
 extern void PrintPixelFormat(rfbPixelFormat *format);
+
+/* stats.c
+ *
+ * The diagnostics are opt-in at compile time: collecting the counters costs
+ * a few instructions in the socket, protocol and decoder hot paths plus two
+ * gettimeofday() calls per rectangle while profiling, which is not free on
+ * the machines this viewer targets.  Build with -DVNCSTATS to get the F8
+ * "Diagnostics..." window; without it every STATS() below compiles to
+ * nothing and stats.c is an empty object.
+ */
+
+#ifdef VNCSTATS
+
+#define STATS(x) do { x; } while (0)
+
+enum {
+  STAT_ENC_RAW = 0,
+  STAT_ENC_COPYRECT,
+  STAT_ENC_RRE,
+  STAT_ENC_CORRE,
+  STAT_ENC_HEXTILE,
+  STAT_ENC_ZLIB,
+  STAT_ENC_TIGHT,
+  STAT_ENC_ZRLE,
+  STAT_ENC_COUNT
+};
+
+typedef struct {
+  unsigned long rects;
+  double bytes;			/* protocol bytes consumed */
+  double pixels;
+  double time;			/* seconds spent decoding, profiling only */
+} VncEncStats;
+
+/* buckets for the distribution histograms */
+#define STAT_NBUCKETS 8
+
+/* one rectangle being decoded, for the per encoding profile */
+typedef struct {
+  double bytes, time, wait;
+} VncRectProfile;
+
+/* Byte and pixel totals are doubles: a long session easily passes the 4GB
+   an unsigned long would hold on 32 bit systems. */
+
+typedef struct {
+  double startTime;
+
+  /* socket layer */
+  double sockIn, sockOut;
+  unsigned long sockReads, sockWrites, sockWaits;
+  double waitTime;		/* seconds blocked waiting for the server */
+
+  /* protocol layer */
+  double streamIn;		/* bytes consumed from the server stream */
+  unsigned long msgsIn, msgsOut;
+  unsigned long msgUpdate, msgColourMap, msgBell, msgCutText, msgFence,
+		msgEndCU;
+  unsigned long sentKey, sentPointer, sentUpdateReq, sentFullReq, sentCutText,
+		sentFence, sentSetDesktopSize, sentEnableCU;
+
+  unsigned long updates, rects, pseudoRects;
+  double pixels, rawEquiv, rectBytes, pseudoBytes;
+  VncEncStats enc[STAT_ENC_COUNT];
+
+  unsigned long cursorShapes, cursorMoves, lastRects, fbResizes, nameChanges;
+
+  /* tight decoder */
+  unsigned long tightFill, tightJpeg, tightBasic, tightRaw;
+  unsigned long tightCopy, tightPalette, tightGradient, tightResets;
+  double tightJpegBytes;
+
+  /* zlib and zrle decoders */
+  double zlibIn, zlibOut, zrleIn, zrleOut;
+  unsigned long zrleTiles;
+
+  /* X11 output */
+  unsigned long putImages, shmPutImages, copyAreas, fillRects;
+  double blitPixels;
+
+  /* timing */
+  double decodeTime;
+  double lastDecodeMs, maxDecodeMs, minDecodeMs, lastWaitMs;
+  double latencyMs, latencyMin, latencyMax, latencySum;
+  unsigned long latencyCount;
+  double updateLatencyMs;
+
+  /* per update distributions and extremes */
+  double minUpdBytes, maxUpdBytes;
+  double minInterval, maxInterval, sumInterval;
+  unsigned long nInterval;
+  double minRects, maxRects;
+  unsigned long histRectPix[STAT_NBUCKETS];
+  unsigned long histUpdBytes[STAT_NBUCKETS];
+  unsigned long histUpdRects[STAT_NBUCKETS];
+  unsigned long histInterval[STAT_NBUCKETS];
+  unsigned long histLatency[STAT_NBUCKETS];
+  unsigned long histDecode[STAT_NBUCKETS];
+} VncStats;
+
+extern VncStats vncStats;
+extern Bool statsProfiling;	/* per rectangle timing, on once opened */
+
+extern double StatsTime(void);
+extern void StatsInit(void);
+extern void StatsRectBegin(VncRectProfile *r);
+extern void StatsRectEnd(VncRectProfile *r, CARD32 enc, int w, int h);
+extern void StatsUpdateStart(void);
+extern void StatsUpdateEnd(void);
+extern void StatsUpdateRequested(void);
+extern void StatsLog(int dir, const char *text, double bytes, double aux);
+extern Bool StatsFencePong(int len, char *data);
+extern void ShowStats(Widget w, XEvent *ev, String *params,
+		      Cardinal *num_params);
+extern void HideStats(Widget w, XEvent *ev, String *params,
+		      Cardinal *num_params);
+extern void ResetStats(Widget w, XEvent *ev, String *params,
+		       Cardinal *num_params);
+extern void StatsPage(Widget w, XEvent *ev, String *params,
+		      Cardinal *num_params);
+extern void PauseStats(Widget w, XEvent *ev, String *params,
+		       Cardinal *num_params);
+
+#else /* !VNCSTATS - compile the whole package out */
+
+#define STATS(x)
+#define StatsTime() 0.0
+#define StatsInit()
+#define StatsRectBegin(r)
+#define StatsRectEnd(r, enc, w, h)
+#define StatsUpdateStart()
+#define StatsUpdateEnd()
+#define StatsUpdateRequested()
+#define StatsLog(dir, text, bytes, aux)
+#define StatsFencePong(len, data) False
+
+typedef struct { int unused; } VncRectProfile;
+
+#endif /* VNCSTATS */
 
 /* selection.c */
 

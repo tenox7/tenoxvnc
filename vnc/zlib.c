@@ -79,6 +79,9 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
 
   remaining = Swap32IfLE(hdr.nBytes);
 
+  STATS(vncStats.zlibIn += remaining);
+  STATS(vncStats.zlibOut += (double)rw * rh * (BPP / 8));
+
   /* Need to initialize the decompressor state. */
   decompStream.next_in   = ( Bytef * )buffer;
   decompStream.avail_in  = 0;

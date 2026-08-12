@@ -86,9 +86,9 @@ Bool newServerCutText = False;
 /* TigerVNC extensions state */
 Bool supportsSetDesktopSize = False;
 Bool pendingDesktopResize = False;
-static Bool supportsFence = False;
-static Bool supportsCU = False;
-static Bool cuActive = False;
+Bool supportsFence = False;
+Bool supportsCU = False;
+Bool cuActive = False;
 static Bool firstUpdate = True;
 static CARD32 screenId = 0;
 static CARD32 screenFlags = 0;
@@ -274,6 +274,8 @@ InitialiseRFBConnection(void)
   rfbClientInitMsg ci;
   int secType;
 
+  StatsInit();
+
   /* reset TigerVNC extensions state for this session */
   supportsSetDesktopSize = False;
   pendingDesktopResize = False;
@@ -319,6 +321,15 @@ InitialiseRFBConnection(void)
 
   fprintf(stderr, "Connected to RFB server, using protocol version 3.%d\n",
 	  protocolMinorVersion);
+
+#ifdef VNCSTATS
+  {
+    char note[48];
+
+    sprintf(note, "connected, protocol 3.%d", protocolMinorVersion);
+    StatsLog(-1, note, 0.0, 0.0);
+  }
+#endif
 
   sprintf(pv, rfbProtocolVersionFormat, 3, protocolMinorVersion);
 
@@ -953,6 +964,10 @@ SetFormatAndEncodings()
 
   if (!WriteExact(rfbsock, buf, len)) return False;
 
+  STATS(vncStats.msgsOut += 2);
+  StatsLog(1, "SetPixelFormat", sz_rfbSetPixelFormatMsg, 0.0);
+  StatsLog(1, "SetEncodings", len, 0.0);
+
   return True;
 }
 
@@ -988,6 +1003,18 @@ SendFramebufferUpdateRequest(int x, int y, int w, int h, Bool incremental)
   if (!WriteExact(rfbsock, (char *)&fur, sz_rfbFramebufferUpdateRequestMsg))
     return False;
 
+  STATS(vncStats.msgsOut++);
+  if (incremental) {
+    STATS(vncStats.sentUpdateReq++);
+    StatsUpdateRequested();
+    StatsLog(1, "FramebufferUpdateRequest incr",
+	     sz_rfbFramebufferUpdateRequestMsg, 0.0);
+  } else {
+    STATS(vncStats.sentFullReq++);
+    StatsLog(1, "FramebufferUpdateRequest full",
+	     sz_rfbFramebufferUpdateRequestMsg, 0.0);
+  }
+
   return True;
 }
 
@@ -1011,6 +1038,11 @@ SendPointerEvent(int x, int y, int buttonMask)
 
   pe.x = Swap16IfLE(x);
   pe.y = Swap16IfLE(y);
+
+  STATS(vncStats.msgsOut++);
+  STATS(vncStats.sentPointer++);
+  StatsLog(1, "PointerEvent", sz_rfbPointerEventMsg, 0.0);
+
   return WriteExact(rfbsock, (char *)&pe, sz_rfbPointerEventMsg);
 }
 
@@ -1027,6 +1059,11 @@ SendKeyEvent(CARD32 key, Bool down)
   ke.type = rfbKeyEvent;
   ke.down = down ? 1 : 0;
   ke.key = Swap32IfLE(key);
+
+  STATS(vncStats.msgsOut++);
+  STATS(vncStats.sentKey++);
+  StatsLog(1, down ? "KeyEvent down" : "KeyEvent up", sz_rfbKeyEventMsg, 0.0);
+
   return WriteExact(rfbsock, (char *)&ke, sz_rfbKeyEventMsg);
 }
 
@@ -1046,6 +1083,11 @@ SendClientCutText(char *str, int len)
 
   cct.type = rfbClientCutText;
   cct.length = Swap32IfLE(len);
+
+  STATS(vncStats.msgsOut++);
+  STATS(vncStats.sentCutText++);
+  StatsLog(1, "ClientCutText", sz_rfbClientCutTextMsg + len, 0.0);
+
   return  (WriteExact(rfbsock, (char *)&cct, sz_rfbClientCutTextMsg) &&
 	   WriteExact(rfbsock, str, len));
 }
@@ -1085,6 +1127,11 @@ SendSetDesktopSize(int width, int height)
   screen->height = Swap16IfLE(height);
   screen->flags = Swap32IfLE(screenFlags);
 
+  STATS(vncStats.msgsOut++);
+  STATS(vncStats.sentSetDesktopSize++);
+  StatsLog(1, "SetDesktopSize", sz_rfbSetDesktopSizeMsg + sz_rfbScreenInfo,
+	   0.0);
+
   return WriteExact(rfbsock, buf, sz_rfbSetDesktopSizeMsg + sz_rfbScreenInfo);
 }
 
@@ -1104,6 +1151,12 @@ SendEnableContinuousUpdates(Bool enable, int x, int y, int w, int h)
   ecu.y = Swap16IfLE(y);
   ecu.w = Swap16IfLE(w);
   ecu.h = Swap16IfLE(h);
+
+  STATS(vncStats.msgsOut++);
+  STATS(vncStats.sentEnableCU++);
+  StatsLog(1, enable ? "EnableContinuousUpdates on" :
+	   "EnableContinuousUpdates off", sz_rfbEnableContinuousUpdatesMsg,
+	   0.0);
 
   return WriteExact(rfbsock, (char *)&ecu, sz_rfbEnableContinuousUpdatesMsg);
 }
@@ -1171,6 +1224,11 @@ SendFence(CARD32 flags, int len, char *data)
   f->length = (CARD8)len;
   if (len > 0)
     memcpy(&buf[sz_rfbFenceMsg], data, len);
+
+  STATS(vncStats.msgsOut++);
+  STATS(vncStats.sentFence++);
+  StatsLog(1, (flags & rfbFenceFlagRequest) ? "Fence request" :
+	   "Fence response", sz_rfbFenceMsg + len, 0.0);
 
   return WriteExact(rfbsock, buf, sz_rfbFenceMsg + len);
 }
@@ -1322,6 +1380,15 @@ ReportRectEncoding(CARD32 enc)
   }
 
   fprintf(stderr, "Server using %s encoding\n", name);
+
+#ifdef VNCSTATS
+  {
+    char note[48];
+
+    sprintf(note, "server using %s encoding", name);
+    StatsLog(-1, note, 0.0, 0.0);
+  }
+#endif
 }
 
 
@@ -1337,6 +1404,8 @@ HandleRFBServerMessage()
   if (!ReadFromRFBServer((char *)&msg, 1))
     return False;
 
+  STATS(vncStats.msgsIn++);
+
   switch (msg.type) {
 
   case rfbSetColourMapEntries:
@@ -1344,6 +1413,9 @@ HandleRFBServerMessage()
     int i;
     CARD16 rgb[3];
     XColor xc;
+
+    STATS(vncStats.msgColourMap++);
+    StatsLog(0, "SetColourMapEntries", sz_rfbSetColourMapEntriesMsg, 0.0);
 
     if (!ReadFromRFBServer(((char *)&msg) + 1,
 			   sz_rfbSetColourMapEntriesMsg - 1))
@@ -1372,7 +1444,11 @@ HandleRFBServerMessage()
     int linesToRead;
     int bytesPerLine;
     int i;
-    int usecs;
+    int rectW, rectH;
+    VncRectProfile prof;
+
+    STATS(vncStats.msgUpdate++);
+    StatsUpdateStart();
 
     if (!ReadFromRFBServer(((char *)&msg.fu) + 1,
 			   sz_rfbFramebufferUpdateMsg - 1))
@@ -1381,17 +1457,25 @@ HandleRFBServerMessage()
     msg.fu.nRects = Swap16IfLE(msg.fu.nRects);
 
     for (i = 0; i < msg.fu.nRects; i++) {
+      StatsRectBegin(&prof);
+
       if (!ReadFromRFBServer((char *)&rect, sz_rfbFramebufferUpdateRectHeader))
 	return False;
 
       rect.encoding = Swap32IfLE(rect.encoding);
-      if (rect.encoding == rfbEncodingLastRect)
+      if (rect.encoding == rfbEncodingLastRect) {
+	StatsRectEnd(&prof, rect.encoding, 0, 0);
 	break;
+      }
 
       rect.r.x = Swap16IfLE(rect.r.x);
       rect.r.y = Swap16IfLE(rect.r.y);
       rect.r.w = Swap16IfLE(rect.r.w);
       rect.r.h = Swap16IfLE(rect.r.h);
+
+      /* the raw decoder walks rect.r.y/h as it goes, so keep the real size */
+      rectW = rect.r.w;
+      rectH = rect.r.h;
 
       if (rect.encoding == rfbEncodingXCursor ||
 	  rect.encoding == rfbEncodingRichCursor) {
@@ -1401,6 +1485,7 @@ HandleRFBServerMessage()
 			      rect.encoding)) {
 	  return False;
 	}
+	StatsRectEnd(&prof, rect.encoding, rectW, rectH);
 	continue;
       }
 
@@ -1408,11 +1493,13 @@ HandleRFBServerMessage()
 	if (!HandleCursorPos(rect.r.x, rect.r.y)) {
 	  return False;
 	}
+	StatsRectEnd(&prof, rect.encoding, 0, 0);
 	continue;
       }
 
       if (rect.encoding == rfbEncodingNewFBSize) {
 	FramebufferSizeChanged(rect.r.w, rect.r.h);
+	StatsRectEnd(&prof, rect.encoding, 0, 0);
 	continue;
       }
 
@@ -1421,6 +1508,7 @@ HandleRFBServerMessage()
 				       rect.r.w, rect.r.h)) {
 	  return False;
 	}
+	StatsRectEnd(&prof, rect.encoding, 0, 0);
 	continue;
       }
 
@@ -1428,6 +1516,7 @@ HandleRFBServerMessage()
 	if (!HandleDesktopName()) {
 	  return False;
 	}
+	StatsRectEnd(&prof, rect.encoding, 0, 0);
 	continue;
       }
 
@@ -1476,6 +1565,8 @@ HandleRFBServerMessage()
       case rfbEncodingCopyRect:
       {
 	rfbCopyRect cr;
+
+	STATS(vncStats.copyAreas++);
 
 	if (!ReadFromRFBServer((char *)&cr, sz_rfbCopyRect))
 	  return False;
@@ -1618,6 +1709,8 @@ HandleRFBServerMessage()
       /* Now we may discard "soft cursor locks". */
       SoftCursorUnlockScreen();
 
+      StatsRectEnd(&prof, rect.encoding, rectW, rectH);
+
       /* Under continuous updates the socket may never block, so yield to
 	 X regularly even inside a large update. */
       if ((i & 15) == 15)
@@ -1642,12 +1735,15 @@ HandleRFBServerMessage()
       firstUpdate = False;
       if (supportsCU && appData.useContinuousUpdates) {
 	fprintf(stderr, "Continuous updates enabled\n");
+	StatsLog(-1, "continuous updates enabled", 0.0, 0.0);
 	cuActive = True;
 	if (!SendEnableContinuousUpdates(True, 0, 0, si.framebufferWidth,
 					 si.framebufferHeight))
 	  return False;
       }
     }
+
+    StatsUpdateEnd();
 
     if (!cuActive) {
       if (!SendIncrementalFramebufferUpdateRequest())
@@ -1661,6 +1757,9 @@ HandleRFBServerMessage()
   {
     Window toplevelWin;
 
+    STATS(vncStats.msgBell++);
+    StatsLog(0, "Bell", 1, 0.0);
+
     XBell(dpy, 0);
 
     if (appData.raiseOnBeep) {
@@ -1673,6 +1772,8 @@ HandleRFBServerMessage()
 
   case rfbServerCutText:
   {
+    STATS(vncStats.msgCutText++);
+
     if (!ReadFromRFBServer(((char *)&msg) + 1,
 			   sz_rfbServerCutTextMsg - 1))
       return False;
@@ -1698,6 +1799,8 @@ HandleRFBServerMessage()
       return False;
 
     serverCutText[msg.sct.length] = 0;
+
+    StatsLog(0, "ServerCutText", sz_rfbServerCutTextMsg + msg.sct.length, 0.0);
 
     newServerCutText = True;
 
@@ -1725,6 +1828,17 @@ HandleRFBServerMessage()
     if (!supportsFence)
       fprintf(stderr, "Server using fence extension\n");
     supportsFence = True;
+    STATS(vncStats.msgFence++);
+
+    /* the echo of our own latency probe stops here */
+    if (!(msg.fence.flags & rfbFenceFlagRequest) &&
+	StatsFencePong(msg.fence.length, fdata)) {
+      StatsLog(0, "Fence latency probe echo",
+	       sz_rfbFenceMsg + msg.fence.length, 0.0);
+      break;
+    }
+
+    StatsLog(0, "Fence", sz_rfbFenceMsg + msg.fence.length, 0.0);
 
     if (appData.debug)
       fprintf(stderr, "Fence from server (flags 0x%lx, %d bytes)\n",
@@ -1748,11 +1862,14 @@ HandleRFBServerMessage()
        the server supports continuous updates; when continuous updates are
        active it marks them disabled, so fall back to polling. */
 
+    STATS(vncStats.msgEndCU++);
+    StatsLog(0, "EndOfContinuousUpdates", 1, 0.0);
     supportsCU = True;
 
     if (cuActive) {
       cuActive = False;
       fprintf(stderr, "Continuous updates disabled\n");
+      StatsLog(-1, "continuous updates disabled", 0.0, 0.0);
       if (!SendIncrementalFramebufferUpdateRequest())
 	return False;
     }

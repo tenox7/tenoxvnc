@@ -113,6 +113,7 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 	  zlibStream[stream_id].msg != NULL)
 	fprintf(stderr, "inflateEnd: %s\n", zlibStream[stream_id].msg);
       zlibStreamActive[stream_id] = False;
+      STATS(vncStats.tightResets++);
     }
     comp_ctl >>= 1;
   }
@@ -143,6 +144,8 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 
     XChangeGC(dpy, gc, GCForeground, &gcv);
     XFillRectangle(dpy, desktopWin, gc, rx, ry, rw, rh);
+    STATS(vncStats.tightFill++);
+    STATS(vncStats.fillRects++);
     return True;
   }
 
@@ -177,14 +180,17 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
     case rfbTightFilterCopy:
       filterFn = FilterCopyBPP;
       bitsPixel = InitFilterCopyBPP(rw, rh);
+      STATS(vncStats.tightCopy++);
       break;
     case rfbTightFilterPalette:
       filterFn = FilterPaletteBPP;
       bitsPixel = InitFilterPaletteBPP(rw, rh);
+      STATS(vncStats.tightPalette++);
       break;
     case rfbTightFilterGradient:
       filterFn = FilterGradientBPP;
       bitsPixel = InitFilterGradientBPP(rw, rh);
+      STATS(vncStats.tightGradient++);
       break;
     default:
       fprintf(stderr, "Tight encoding: unknown filter code received.\n");
@@ -193,6 +199,7 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
   } else {
     filterFn = FilterCopyBPP;
     bitsPixel = InitFilterCopyBPP(rw, rh);
+    STATS(vncStats.tightCopy++);
   }
   if (bitsPixel == 0) {
     fprintf(stderr, "Tight encoding: error receiving palette.\n");
@@ -209,8 +216,11 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
     filterFn(rh, (CARDBPP *)buffer2);
     CopyDataToScreen(buffer2, rx, ry, rw, rh);
 
+    STATS(vncStats.tightRaw++);
     return True;
   }
+
+  STATS(vncStats.tightBasic++);
 
   /* Read the length (1..3 bytes) of compressed data following. */
   compressedLen = (int)ReadCompactLen();
@@ -574,6 +584,9 @@ DecompressJpegRectBPP(int x, int y, int w, int h)
     free(compressedData);
     return False;
   }
+
+  STATS(vncStats.tightJpeg++);
+  STATS(vncStats.tightJpegBytes += compressedLen);
 
   cinfo.err = jpeg_std_error(&jerr);
   jpeg_create_decompress(&cinfo);

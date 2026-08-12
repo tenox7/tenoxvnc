@@ -66,17 +66,26 @@ rfbsockReadyCallback(XtPointer clientData, int *fd, XtInputId *id)
 static void
 ProcessXtEvents()
 {
+#ifdef VNCSTATS
+  double start = StatsTime();
+#endif
+
   rfbsockReady = False;
   XtAppAddInput(appContext, rfbsock, (XtPointer)XtInputReadMask,
 		rfbsockReadyCallback, NULL);
   while (!rfbsockReady) {
     XtAppProcessEvent(appContext, XtIMAll);
   }
+
+  STATS(vncStats.sockWaits++);
+  STATS(vncStats.waitTime += StatsTime() - start);
 }
 
 Bool
 ReadFromRFBServer(char *out, unsigned int n)
 {
+  STATS(vncStats.streamIn += n);
+
   if (n <= buffered) {
     memcpy(out, bufoutptr, n);
     bufoutptr += n;
@@ -96,6 +105,7 @@ ReadFromRFBServer(char *out, unsigned int n)
 
     while (buffered < n) {
       int i = read(rfbsock, buf + buffered, BUF_SIZE - buffered);
+      STATS(if (i > 0) { vncStats.sockIn += i; vncStats.sockReads++; });
       if (i <= 0) {
 	if (i < 0) {
 	  if (errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -125,6 +135,7 @@ ReadFromRFBServer(char *out, unsigned int n)
 
     while (n > 0) {
       int i = read(rfbsock, out, n);
+      STATS(if (i > 0) { vncStats.sockIn += i; vncStats.sockReads++; });
       if (i <= 0) {
 	if (i < 0) {
 	  if (errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -164,6 +175,7 @@ WriteExact(int sock, char *buf, int n)
 
   while (i < n) {
     j = write(sock, buf + i, (n - i));
+    STATS(if (j > 0) { vncStats.sockOut += j; vncStats.sockWrites++; });
     if (j <= 0) {
       if (j < 0) {
 	if (errno == EWOULDBLOCK || errno == EAGAIN) {

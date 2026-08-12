@@ -197,6 +197,9 @@ HandleZRLE(int rx, int ry, int rw, int rh)
   p = (CARD8 *)zrleBuf;
   end = (CARD8 *)zrleBuf + (zrleBufSize - zrleStream.avail_out);
 
+  STATS(vncStats.zrleIn += Swap32IfLE(hdr.nBytes));
+  STATS(vncStats.zrleOut += (double)(end - p));
+
   /* Walk the 64x64 tiles. */
 
   for (ty = 0; ty < rh; ty += rfbZRLETileHeight) {
@@ -208,6 +211,8 @@ HandleZRLE(int rx, int ry, int rw, int rh)
       CARD8 subenc;
       CARD8 palette[128 * 4];
       int i, npixels;
+
+      STATS(vncStats.zrleTiles++);
 
       tw = rw - tx;
       if (tw > rfbZRLETileWidth)

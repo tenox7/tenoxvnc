@@ -195,6 +195,15 @@ ResizeDesktopFramebuffer(int width, int height)
 
   fprintf(stderr, "Framebuffer size changed to %dx%d\n", width, height);
 
+#ifdef VNCSTATS
+  {
+    char note[48];
+
+    sprintf(note, "framebuffer resized to %dx%d", width, height);
+    StatsLog(-1, note, 0.0, 0.0);
+  }
+#endif
+
   /* hide the soft cursor while the ground shifts under it */
   SoftCursorLockArea(0, 0, si.framebufferWidth, si.framebufferHeight);
 
@@ -516,14 +525,20 @@ RepaintScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
   memset(image->data, 0, image->bytes_per_line * image->height);
 
+  STATS(vncStats.blitPixels += (double)si.framebufferWidth * si.framebufferHeight);
+
 #ifdef MITSHM
-  if (appData.useShm)
+  if (appData.useShm) {
+    STATS(vncStats.shmPutImages++);
     XShmPutImage(dpy, desktopWin, gc, image, 0, 0, 0, 0,
 		 si.framebufferWidth, si.framebufferHeight, False);
-  else
+  } else
 #endif
+  {
+    STATS(vncStats.putImages++);
     XPutImage(dpy, desktopWin, gc, image, 0, 0, 0, 0,
 	      si.framebufferWidth, si.framebufferHeight);
+  }
 
   SoftCursorUnlockScreen();
 
@@ -662,12 +677,16 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
     CopyBGR233ToScreen((CARD8 *)buf, x, y, width, height);
   }
 
+  STATS(vncStats.blitPixels += (double)width * height);
+
 #ifdef MITSHM
   if (appData.useShm) {
+    STATS(vncStats.shmPutImages++);
     XShmPutImage(dpy, desktopWin, gc, image, x, y, x, y, width, height, False);
     return;
   }
 #endif
+  STATS(vncStats.putImages++);
   XPutImage(dpy, desktopWin, gc, image, x, y, x, y, width, height);
 }
 
