@@ -1,26 +1,12 @@
-# tenoxvnc - ultra portable vintage unix VNC viewer
-# TightVNC 1.3.10 X11 viewer + TigerVNC feature backports, vendored zlib/jpeg
-#
-# Build:  make <target>   where target is one of:
-#   linux solaris hpux hpux9 aix unixware osf1 irix irix5 netbsd macos
-# or just "make" with default CC/CFLAGS/LDFLAGS below.
 
-# Live diagnostics window (F8 -> Diagnostics...): protocol debug log, decode
-# profiling, counters, distributions and charts.  Collecting the counters
-# costs a little in the socket, protocol and decoder paths, so it is left out
-# unless asked for:
-#   VNCSTATS=true make <target>
-# The three substitutions below accept true, yes or 1 and are plain POSIX
-# suffix replacements, so they work with native make as well as gmake.
-STATS_1 = $(VNCSTATS:true=-DVNCSTATS)
-STATS_2 = $(STATS_1:yes=-DVNCSTATS)
-STATS = $(STATS_2:1=-DVNCSTATS)
 
 CC = gcc
 INCS = -Ivnc -Izlib -Ijpeg
 CFLAGS = -O2 $(INCS) -DMITSHM $(STATS)
 LDFLAGS = -lXt -lXext -lX11 -lm
 TARGET = tenoxvnc
+# Diag under F8 Menu. Off unless VNCSTATS=true make <target>
+STATS = $(VNCSTATS:true=-DVNCSTATS)
 
 VIEWER_SRCS = vnc/argsresources.c vnc/caps.c vnc/colour.c vnc/cursor.c \
 	vnc/desktop.c vnc/dialogs.c vnc/fullscreen.c vnc/listen.c vnc/misc.c \
@@ -43,7 +29,23 @@ JPEG_OBJS = jpeg/jcomapi.o jpeg/jutils.o jpeg/jerror.o jpeg/jmemmgr.o \
 
 OBJECTS = $(VIEWER_SRCS:.c=.o) $(ZLIB_OBJS) $(JPEG_OBJS)
 
-all: $(TARGET)
+# Auto detect OS
+all:
+	@s=`uname -s`; r=`uname -r`; \
+	case "$$s" in \
+	  Linux)   t=linux;; \
+	  Darwin)  t=macos;; \
+	  SunOS)   t=solaris;; \
+	  AIX)     t=aix;; \
+	  OSF1)    t=osf1;; \
+	  NetBSD)  t=netbsd;; \
+	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *) t=hpux;; esac;; \
+	  IRIX*)   case "$$r" in 5.*) t=irix5;; *) t=irix;; esac;; \
+	  UnixWare|UNIX_SV|SCO_SV) t=unixware;; \
+	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
+	esac; \
+	echo "=> make $$t"; \
+	$(MAKE) $$t
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
@@ -58,46 +60,43 @@ $(TARGET): $(OBJECTS)
 
 linux:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 macos:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/opt/X11/include $(STATS)" \
-	  LDFLAGS="-L/opt/X11/lib -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-L/opt/X11/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 solaris:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
-	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXt -lXext -lX11 -lm -lsocket -lnsl"
+	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
 # hpux covers 10.20 and 11.x with native ANSI cc; needs gmake.
 # Xt is a static archive in /usr/contrib, hence explicit -lSM -lICE.
 # hpux9 uses X11R5 which has no XShm headers.
 hpux:
 	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
-	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm"
+	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
 hpux9:
 	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(STATS)" \
-	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 unixware:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm -lsocket -lnsl"
+	  LDFLAGS="-lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
 osf1:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 irix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -isystem /usr/include $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
-# see sng Makefile.x11 for the irix5 native-ld story; same recipe works here:
-# compile with gcc, link with tgcware GNU ld directly (5.3 native ld can't
-# read gas objects, and collect2 has /usr/bin/ld baked in)
 IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
 IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
 
@@ -111,12 +110,12 @@ irix5:
 
 netbsd:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include $(STATS)" \
-	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 clean:
 	rm -f *.o */*.o $(TARGET)
 
-install: $(TARGET)
+install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
