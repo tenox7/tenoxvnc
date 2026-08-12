@@ -842,6 +842,15 @@ XwBuildWindow(XwPanel *p, const char *name, const char *title, int w, int h,
 		    Button1MotionMask | KeyPressMask,
 		    False, XwEvent, (XtPointer)p);
 
+  /* The window manager gives the focus to the shell, not to the canvas inside
+     it.  A key event goes to the deepest window under the pointer only while
+     the pointer is somewhere in the focus window's tree; with the pointer off
+     the panel the shell itself is the source, and events propagate upwards,
+     so the canvas would never see it.  Listening on both means the panel takes
+     what is typed wherever the pointer happens to be sitting, and nothing
+     arrives twice: propagation stops at the first window that asked for it. */
+  XtAddEventHandler(p->shell, KeyPressMask, False, XwEvent, (XtPointer)p);
+
   XtRealizeWidget(p->shell);
   p->win = XtWindow(p->canvas);
   p->gc = XCreateGC(dpy, p->win, 0, NULL);
