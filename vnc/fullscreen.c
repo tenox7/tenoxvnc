@@ -1,5 +1,6 @@
 /*
  *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+ *  Copyright (C) 2026 TenoxVNC.  All Rights Reserved.
  *
  *  This is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,312 +19,125 @@
  */
 
 /*
- * fullscreen.c - functions to deal with full-screen mode.
+ * fullscreen.c - full-screen mode.
+ *
+ * The toplevel is made override-redirect so the window manager leaves it
+ * alone, and sized to the whole display.  scroll.c then gives the entire
+ * area to the desktop with no scrollbars, and bump scrolling moves it when
+ * the desktop is bigger than the screen.
+ *
+ * The old version of this file was written against the Athena Viewport: it
+ * drove the widget's forceBars resource, reached into its private "clip"
+ * child to measure the scrollbars, and re-targeted Form constraints to move
+ * the viewport about.  Owning the scrolling outright makes all of that go
+ * away - full screen is now just a resize plus ScrollTo().
  */
 
 #include <vncviewer.h>
 
-#ifdef __VMS
-
-/*
- * Full-screen mode is not built on VMS.  Every part of it is written against
- * the Athena widgets DECwindows does not have: it retargets the Form
- * constraints of "viewport", drives Viewport's forceBars resource and its
- * internal "clip" child, and bump scrolls with XawViewportSetCoordinates().
- * The actions stay in the table in argsresources.c, so they have to remain
- * defined - they just do nothing.
- */
-
-void
-FullScreenOn()
-{
-  fprintf(stderr, "%s: full-screen mode is not available on OpenVMS\n",
-	  programName);
-  appData.fullScreen = False;
-}
-
-void FullScreenOff() { appData.fullScreen = False; }
-
-void
-ToggleFullScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
-{
-  FullScreenOn();
-}
-
-void
-SetFullScreenState(Widget w, XEvent *ev, String *params, Cardinal *num_params)
-{
-}
-
-Bool
-BumpScroll(XEvent *ev)
-{
-  return False;
-}
-
-#else /* !__VMS */
-
-#include <X11/Xaw/Form.h>
-#include <X11/Xaw/Viewport.h>
-#include <X11/Xaw/Toggle.h>
-
-static Bool DoBumpScroll();
 static void BumpScrollTimerCallback(XtPointer clientData, XtIntervalId *id);
+static Bool DoBumpScroll(void);
+
 static XtIntervalId timer;
 static Bool timerSet = False;
 static Bool scrollLeft, scrollRight, scrollUp, scrollDown;
-static Position desktopX, desktopY;
-static Dimension viewportWidth, viewportHeight;
-static Dimension scrollbarWidth, scrollbarHeight;
 
+/* geometry to put back when leaving full-screen mode */
+static Dimension savedWidth, savedHeight;
 
 
 /*
- * FullScreenOn goes into full-screen mode.  It makes the toplevel window
- * unmanaged by the window manager and sets its geometry appropriately.
- *
- * We have toplevel -> form -> viewport -> desktop.  "form" must always be the
- * same size as "toplevel".  "desktop" should always be fixed at the size of
- * the VNC desktop.  Normally "viewport" is the same size as "toplevel" (<=
- * size of "desktop"), and "viewport" deals with any difference by putting up
- * scrollbars.
- *
- * When we go into full-screen mode, we allow "viewport" and "form" to be
- * different sizes, and we effectively need to work out all the geometries
- * ourselves.  There are two cases to deal with:
- *
- * 1. When the desktop is smaller than the display, "viewport" is simply the
- *    size of the desktop and "toplevel" (and "form") are the size of the
- *    display.  "form" is visible around the edges of the desktop.
- *
- * 2. When the desktop is bigger than the display in either or both dimensions,
- *    we force "viewport" to have scrollbars.
- *
- *    If the desktop width is bigger than the display width, then the width of
- *    "viewport" is the display width plus the scrollbar width, otherwise it's
- *    the desktop width plus the scrollbar width.  The width of "toplevel" (and
- *    "form") is then either the same as "viewport", or just the display width,
- *    respectively.  Similarly for the height of "viewport" and the height of
- *    "toplevel".
- *
- *    So if the desktop is bigger than the display in both dimensions then both
- *    the scrollbars will be just off the screen.  If it's bigger in only one
- *    dimension then that scrollbar _will_ be visible, with the other one just
- *    off the screen.  We treat this as a "feature" rather than a problem - you
- *    can't easily get around it if you want to use the Athena viewport for
- *    doing the scrolling.
- *
- * In either case, we position "viewport" in the middle of "form".
- *
- * We store the calculated size of "viewport" and the scrollbars in global
- * variables so that FullScreenOff can use them.
+ * FullScreenOn goes into full-screen mode.
  */
 
 void
 FullScreenOn()
 {
-  Dimension toplevelWidth, toplevelHeight;
-  Dimension oldViewportWidth, oldViewportHeight, clipWidth, clipHeight;
-  Position viewportX, viewportY;
-
-  appData.fullScreen = True;
-
-  if (si.framebufferWidth > dpyWidth || si.framebufferHeight > dpyHeight) {
-
-    XtVaSetValues(viewport, XtNforceBars, True, NULL);
-    XtVaGetValues(viewport, XtNwidth, &oldViewportWidth,
-		  XtNheight, &oldViewportHeight, NULL);
-    XtVaGetValues(XtNameToWidget(viewport, "clip"),
-		  XtNwidth, &clipWidth, XtNheight, &clipHeight, NULL);
-
-    scrollbarWidth = oldViewportWidth - clipWidth;
-    scrollbarHeight = oldViewportHeight - clipHeight;
-
-    if (si.framebufferWidth > dpyWidth) {
-      viewportWidth = toplevelWidth = dpyWidth + scrollbarWidth;
-    } else {
-      viewportWidth = si.framebufferWidth + scrollbarWidth;
-      toplevelWidth = dpyWidth;
-    }
-
-    if (si.framebufferHeight > dpyHeight) {
-      viewportHeight = toplevelHeight = dpyHeight + scrollbarHeight;
-    } else {
-      viewportHeight = si.framebufferHeight + scrollbarHeight;
-      toplevelHeight = dpyHeight;
-    }
-
-  } else {
-    viewportWidth = si.framebufferWidth;
-    viewportHeight = si.framebufferHeight;
-    toplevelWidth = dpyWidth;
-    toplevelHeight = dpyHeight;
-  }
-
-  viewportX = (toplevelWidth - viewportWidth) / 2;
-  viewportY = (toplevelHeight - viewportHeight) / 2;
-
-
-  /* We want to stop the window manager from managing our toplevel window.
-     This is not really a nice thing to do, so may not work properly with every
-     window manager.  We do this simply by setting overrideRedirect and
-     reparenting our window to the root.  The window manager will get a
-     ReparentNotify and hopefully clean up its frame window. */
-
-  XtVaSetValues(toplevel, XtNoverrideRedirect, True, NULL);
-
-  XReparentWindow(dpy, XtWindow(toplevel), DefaultRootWindow(dpy), 0, 0);
-
-  /* Some WMs does not obey x,y values of XReparentWindow; the window
-     is not placed in the upper, left corner. The code below fixes
-     this: It manually moves the window, after the Xserver is done
-     with XReparentWindow. The last XSync seems to prevent losing
-     focus, but I don't know why. */
-  XSync(dpy, False);
-  XMoveWindow(dpy, XtWindow(toplevel), 0, 0);
-  XSync(dpy, False);
-
-  /* Now we want to fix the size of "viewport".  We shouldn't just change it
-     directly.  Instead we set "toplevel" to the required size (which should
-     propagate through "form" to "viewport").  Then we remove "viewport" from
-     being managed by "form", change its resources to position it and make sure
-     that "form" won't attempt to resize it, then ask "form" to manage it
-     again. */
-
-  XtResizeWidget(toplevel, viewportWidth, viewportHeight, 0);
-
-  XtUnmanageChild(viewport);
-
-  XtVaSetValues(viewport,
-		XtNhorizDistance, viewportX,
-		XtNvertDistance, viewportY,
-		XtNleft, XtChainLeft,
-		XtNright, XtChainLeft,
-		XtNtop, XtChainTop,
-		XtNbottom, XtChainTop,
+  XtVaGetValues(toplevel, XtNwidth, &savedWidth, XtNheight, &savedHeight,
 		NULL);
 
-  XtManageChild(viewport);
+  appData.fullScreen = True;
+  ScrollAllowBars(False);
 
-  /* Now we can set "toplevel" to its proper size. */
-
-  XtResizeWidget(toplevel, toplevelWidth, toplevelHeight, 0);
-
-  /* Set the popup to overrideRedirect too */
-
-  XtVaSetValues(popup, XtNoverrideRedirect, True, NULL);
-
-  /* Try to get the input focus. */
-
-  XSetInputFocus(dpy, DefaultRootWindow(dpy), RevertToPointerRoot,
-		 CurrentTime);
-
-  /* Optionally, grab the keyboard. */
-
-  if (appData.grabKeyboard &&
-      XtGrabKeyboard(desktop, True, GrabModeAsync,
-		     GrabModeAsync, CurrentTime) != GrabSuccess) {
-    fprintf(stderr, "XtGrabKeyboard() failed.\n");
-  }
+  /* Unmap first: a window manager that has already reparented us will not
+     notice overrideRedirect changing underneath it. */
+  XtUnmapWidget(toplevel);
+  XtVaSetValues(toplevel, XtNoverrideRedirect, True, NULL);
+  XtVaSetValues(toplevel, XtNmaxWidth, 32767, XtNmaxHeight, 32767, NULL);
+  XtResizeWidget(toplevel, dpyWidth, dpyHeight, 0);
+  XtMoveWidget(toplevel, 0, 0);
+  XtMapWidget(toplevel);
+  XRaiseWindow(dpy, XtWindow(toplevel));
+  XSync(dpy, False);
 }
 
 
 /*
- * FullScreenOff leaves full-screen mode.  It makes the toplevel window
- * managed by the window manager and sets its geometry appropriately.
- *
- * We also want to reestablish the link between the geometry of "form" and
- * "viewport".  We do this similarly to the way we broke it in FullScreenOn, by
- * making "viewport" unmanaged, changing certain resources on it and asking
- * "form" to manage it again.
- *
- * There seems to be a slightly strange behaviour with setting forceBars back
- * to false, which results in "desktop" being stretched by the size of the
- * scrollbars under certain circumstances.  Resizing both "toplevel" and
- * "viewport" to the full-screen viewport size minus the scrollbar size seems
- * to fix it, though I'm not entirely sure why. */
+ * FullScreenOff returns to a normal window.
+ */
 
 void
 FullScreenOff()
 {
-  int toplevelWidth = si.framebufferWidth;
-  int toplevelHeight = si.framebufferHeight;
+  Dimension w = savedWidth, h = savedHeight;
 
   appData.fullScreen = False;
 
-  if (appData.grabKeyboard)
-    XtUngrabKeyboard(desktop, CurrentTime);
+  if (timerSet) {
+    XtRemoveTimeOut(timer);
+    timerSet = False;
+  }
+
+  ScrollAllowBars(True);
+  ScrollTo(0, 0);
+
+  if (w == 0 || w > dpyWidth)
+    w = si.framebufferWidth;
+  if (h == 0 || h > dpyHeight)
+    h = si.framebufferHeight;
+
+  if (w + appData.wmDecorationWidth >= dpyWidth)
+    w = dpyWidth - appData.wmDecorationWidth;
+  if (h + appData.wmDecorationHeight >= dpyHeight)
+    h = dpyHeight - appData.wmDecorationHeight;
 
   XtUnmapWidget(toplevel);
-
-  XtResizeWidget(toplevel,
-		 viewportWidth - scrollbarWidth,
-		 viewportHeight - scrollbarHeight, 0);
-  XtResizeWidget(viewport,
-		 viewportWidth - scrollbarWidth,
-		 viewportHeight - scrollbarHeight, 0);
-
-  XtVaSetValues(viewport, XtNforceBars, False, NULL);
-
-  XtUnmanageChild(viewport);
-
-  XtVaSetValues(viewport,
-		XtNhorizDistance, 0,
-		XtNvertDistance, 0,
-		XtNleft, XtChainLeft,
-		XtNright, XtChainRight,
-		XtNtop, XtChainTop,
-		XtNbottom, XtChainBottom,
-		NULL);
-
-  XtManageChild(viewport);
-
   XtVaSetValues(toplevel, XtNoverrideRedirect, False, NULL);
-
-  if ((toplevelWidth + appData.wmDecorationWidth) >= dpyWidth)
-    toplevelWidth = dpyWidth - appData.wmDecorationWidth;
-
-  if ((toplevelHeight + appData.wmDecorationHeight) >= dpyHeight)
-    toplevelHeight = dpyHeight - appData.wmDecorationHeight;
-
-  XtResizeWidget(toplevel, toplevelWidth, toplevelHeight, 0);
-
+  XtResizeWidget(toplevel, w, h, 0);
   XtMapWidget(toplevel);
   XSync(dpy, False);
-
-  /* Set the popup back to non-overrideRedirect */
-
-  XtVaSetValues(popup, XtNoverrideRedirect, False, NULL);
 }
 
 
 /*
- * SetFullScreenState is an action which sets the "state" resource of a toggle
- * widget to reflect whether we're in full-screen mode.
- */
-
-void
-SetFullScreenState(Widget w, XEvent *ev, String *params, Cardinal *num_params)
-{
-  if (appData.fullScreen)
-    XtVaSetValues(w, XtNstate, True, NULL);
-  else
-    XtVaSetValues(w, XtNstate, False, NULL);
-}
-
-
-/*
- * ToggleFullScreen is an action which toggles in and out of full-screen mode.
+ * ToggleFullScreen is an action which toggles in and out of full-screen
+ * mode.
  */
 
 void
 ToggleFullScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 {
-  if (appData.fullScreen) {
+  if (appData.fullScreen)
     FullScreenOff();
-  } else {
+  else
     FullScreenOn();
-  }
+}
+
+
+/*
+ * SetFullScreenState was an action which set the "state" resource of an
+ * Athena toggle to match.  The F8 menu draws its own checkbox from
+ * appData.fullScreen now, so this only does anything if someone has bound it
+ * to a widget that has a state resource.
+ */
+
+void
+SetFullScreenState(Widget w, XEvent *ev, String *params, Cardinal *num_params)
+{
+  if (!w || !XtIsWidget(w))
+    return;
+
+  XtVaSetValues(w, "state", appData.fullScreen, NULL);
 }
 
 
@@ -350,11 +164,6 @@ BumpScroll(XEvent *ev)
   if (scrollLeft || scrollRight || scrollUp || scrollDown) {
     if (timerSet)
       return True;
-
-    XtVaGetValues(desktop, XtNx, &desktopX, XtNy, &desktopY, NULL);
-    desktopX = -desktopX;
-    desktopY = -desktopY;
-
     return DoBumpScroll();
   }
 
@@ -367,54 +176,47 @@ BumpScroll(XEvent *ev)
 }
 
 static Bool
-DoBumpScroll()
+DoBumpScroll(void)
 {
-  int oldx = desktopX, oldy = desktopY;
+  int x, y, oldx, oldy, visW, visH;
 
-  if (scrollRight) {
-    if (desktopX < si.framebufferWidth - dpyWidth) {
-      desktopX += appData.bumpScrollPixels;
-      if (desktopX > si.framebufferWidth - dpyWidth)
-	desktopX = si.framebufferWidth - dpyWidth;
-    }
-  } else if (scrollLeft) {
-    if (desktopX > 0) {
-      desktopX -= appData.bumpScrollPixels;
-      if (desktopX < 0)
-	desktopX = 0;
-    }
+  ScrollGetPos(&x, &y);
+  ScrollGetVisible(&visW, &visH);
+  oldx = x;
+  oldy = y;
+
+  if (scrollRight)
+    x += appData.bumpScrollPixels;
+  else if (scrollLeft)
+    x -= appData.bumpScrollPixels;
+
+  if (scrollDown)
+    y += appData.bumpScrollPixels;
+  else if (scrollUp)
+    y -= appData.bumpScrollPixels;
+
+  if (x > si.framebufferWidth - visW)
+    x = si.framebufferWidth - visW;
+  if (y > si.framebufferHeight - visH)
+    y = si.framebufferHeight - visH;
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
+
+  if (x == oldx && y == oldy) {
+    timerSet = False;
+    return False;
   }
 
-  if (scrollDown) {
-    if (desktopY < si.framebufferHeight - dpyHeight) {
-      desktopY += appData.bumpScrollPixels;
-      if (desktopY > si.framebufferHeight - dpyHeight)
-	desktopY = si.framebufferHeight - dpyHeight;
-    }
-  } else if (scrollUp) {
-    if (desktopY > 0) {
-      desktopY -= appData.bumpScrollPixels;
-      if (desktopY < 0)
-	desktopY = 0;
-    }
-  }
-
-  if (oldx != desktopX || oldy != desktopY) {
-    XawViewportSetCoordinates(viewport, desktopX, desktopY);
-    timer = XtAppAddTimeOut(appContext, appData.bumpScrollTime,
-			    BumpScrollTimerCallback, NULL);
-    timerSet = True;
-    return True;
-  }
-
-  timerSet = False;
-  return False;
+  ScrollTo(x, y);
+  timer = XtAppAddTimeOut(appContext, appData.bumpScrollTime,
+			  BumpScrollTimerCallback, NULL);
+  timerSet = True;
+  return True;
 }
 
 static void
 BumpScrollTimerCallback(XtPointer clientData, XtIntervalId *id)
 {
+  timerSet = False;
   DoBumpScroll();
 }
-
-#endif /* !__VMS */

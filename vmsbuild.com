@@ -2,10 +2,10 @@ $! TenoxVNC build procedure for OpenVMS (DECwindows X11)
 $!
 $! Tested on VAX/VMS V7.3 with Compaq C V6.4 and DECwindows Motif.
 $!
-$! DECwindows has no Athena widget set, so the F8 popup menu and full-screen
-$! mode are left out, the server/password dialogs become terminal prompts,
-$! and vnc/vms.c does the desktop scrolling an Xaw Viewport would have done.
-$! MIT-SHM is not defined: there is no System V shared memory on VMS.
+$! DECwindows has no Athena widget set, and the viewer no longer wants one:
+$! it draws its own dialog, F8 menu and scrollbars with Xlib, so this links
+$! against nothing but Xlib, Xt and Xext.  MIT-SHM is not defined either -
+$! there is no System V shared memory on VMS.
 $!
 $! The sources are copied to a work directory on a local disk and built
 $! there, then only the finished image is copied back.  Building directly in
@@ -87,7 +87,7 @@ $ LIST = "ARGSRESOURCES CAPS COLOUR CURSOR D3DES DESKTOP DIALOGS FULLSCREEN"
 $ GOSUB COMPILE
 $ LIST = "LISTEN MISC POPUP RFBPROTO SELECTION SHM SOCKETS STATS TUNNEL"
 $ GOSUB COMPILE
-$ LIST = "VNCAUTH VNCVIEWER VMS"
+$ LIST = "VNCAUTH VNCVIEWER VMS XWIDGETS SCROLL"
 $ GOSUB COMPILE
 $!
 $ SAY "Compiling zlib..."

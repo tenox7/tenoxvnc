@@ -35,13 +35,8 @@ char *fallback_resources[] = {
     <Enter>: SelectionToVNC()\\n\
     <Leave>: SelectionFromVNC()",
 
+  /* the border around a desktop smaller than the window */
   "*form.background: black",
-
-  "*viewport.allowHoriz: True",
-  "*viewport.allowVert: True",
-  "*viewport.useBottom: True",
-  "*viewport.useRight: True",
-  "*viewport*Scrollbar*thumb: None",
 
   "*desktop.baseTranslations:\
      <Key>F8: ShowPopup()\\n\
@@ -55,82 +50,13 @@ char *fallback_resources[] = {
      resources of its own; the Athena serverDialog/passwordDialog specs that
      used to be here are gone with it. */
 
-  "*popup.title: TenoxVNC popup",
-  "*popup*background: grey",
-  "*popup*font: -*-helvetica-bold-r-*-*-16-*-*-*-*-*-*-*",
-  "*popup*justify: left",
-  "*popup.buttonForm.Command.borderWidth: 0",
-  "*popup.buttonForm.Toggle.borderWidth: 0",
+  /* The F8 menu is drawn by popup.c and has no widget resources of its own.
+     The one thing still worth setting is what the window manager close
+     button does to it. */
 
   "*popup.translations: #override <Message>WM_PROTOCOLS: HidePopup()",
-  "*popup.buttonForm.translations: #override\\n\
-     <KeyPress>: SendRFBEvent() HidePopup()",
 
 #ifdef VNCSTATS
-  "*popupButtonCount: 12",
-#else
-  "*popupButtonCount: 11",
-#endif
-
-  "*popup*button1.label: Dismiss popup",
-  "*popup*button1.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: HidePopup()",
-
-  "*popup*button2.label: Quit viewer",
-  "*popup*button2.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: Quit()",
-
-  "*popup*button3.label: Full screen",
-  "*popup*button3.type: toggle",
-  "*popup*button3.translations: #override\\n\
-     <Visible>: SetFullScreenState()\\n\
-     <Btn1Down>,<Btn1Up>: toggle() ToggleFullScreen() HidePopup()",
-
-  "*popup*button4.label: Clipboard: local -> remote",
-  "*popup*button4.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: SelectionToVNC(always) HidePopup()",
-
-  "*popup*button5.label: Clipboard: local <- remote",
-  "*popup*button5.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: SelectionFromVNC(always) HidePopup()",
-
-  "*popup*button6.label: Request refresh",
-  "*popup*button6.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: SendRFBEvent(fbupdate) HidePopup()",
-
-  "*popup*button7.label: Send ctrl-alt-del",
-  "*popup*button7.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: SendRFBEvent(keydown,Control_L)\
-                          SendRFBEvent(keydown,Alt_L)\
-                          SendRFBEvent(key,Delete)\
-                          SendRFBEvent(keyup,Alt_L)\
-                          SendRFBEvent(keyup,Control_L)\
-                          HidePopup()",
-
-  "*popup*button8.label: Send F8",
-  "*popup*button8.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: SendRFBEvent(key,F8) HidePopup()",
-
-  "*popup*button9.label: Continuous updates",
-  "*popup*button9.type: toggle",
-  "*popup*button9.translations: #override\\n\
-     <Visible>: SetContinuousUpdatesState()\\n\
-     <Btn1Down>,<Btn1Up>: toggle() ToggleContinuousUpdates() HidePopup()",
-
-  "*popup*button10.label: Repaint screen",
-  "*popup*button10.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: RepaintScreen() HidePopup()",
-
-  "*popup*button11.label: Local cursor: arrow",
-  "*popup*button11.translations: #override\\n\
-     <Visible>: SetLocalCursorState()\\n\
-     <Btn1Down>,<Btn1Up>: CycleLocalCursor()",
-
-#ifdef VNCSTATS
-  "*popup*button12.label: Diagnostics...",
-  "*popup*button12.translations: #override\\n\
-     <Btn1Down>,<Btn1Up>: ShowStats() HidePopup()",
-
   "*statsShell.title: TenoxVNC diagnostics",
   "*statsShell.iconName: TenoxVNC diagnostics",
   "*statsShell.translations: #override\\n\

@@ -22,10 +22,6 @@
  */
 
 #include <vncviewer.h>
-#ifndef __VMS		/* no Athena widget set on DECwindows - see vms.c */
-#include <X11/Xaw/Viewport.h>
-#include <X11/Xmu/Converters.h>
-#endif
 #include <X11/cursorfont.h>
 #ifdef MITSHM
 #include <X11/extensions/XShm.h>
@@ -60,6 +56,40 @@ static void HandleToplevelConfigure(Widget w, XtPointer ptr, XEvent *ev,
 static void ResizeTimerCallback(XtPointer clientData, XtIntervalId *id);
 static void ScheduleRemoteResize(int width, int height);
 
+/*
+ * The backingStore resource and its string converter used to come from Xmu.
+ * They are twenty lines, and having them here means the viewer does not need
+ * -lXmu at all - which matters on systems that do not ship it.
+ */
+
+#define XtNbackingStore "backingStore"
+#define XtCBackingStore "BackingStore"
+#define XtRBackingStore "BackingStore"
+
+static void
+CvtStringToBackingStore(XrmValue *args, Cardinal *num_args, XrmValue *from,
+			XrmValue *to)
+{
+  static int result;
+  char *s = (char *)from->addr;
+
+  if (strcasecmp(s, "notUseful") == 0)
+    result = NotUseful;
+  else if (strcasecmp(s, "whenMapped") == 0)
+    result = WhenMapped;
+  else if (strcasecmp(s, "always") == 0)
+    result = Always;
+  else if (strcasecmp(s, "default") == 0)
+    result = Always;
+  else {
+    XtStringConversionWarning(s, XtRBackingStore);
+    result = Always;
+  }
+
+  to->addr = (XPointer)&result;
+  to->size = sizeof(result);
+}
+
 static XtResource desktopBackingStoreResources[] = {
   {
     XtNbackingStore, XtCBackingStore, XtRBackingStore, sizeof(int), 0,
@@ -78,20 +108,18 @@ DesktopInitBeforeRealization()
 {
   int i;
 
-#ifdef __VMS
+  /* Plain composites, not Athena Form and Viewport: "form" is the
+     background and carries the scrollbars, "viewport" is the visible area
+     that clips "desktop".  scroll.c does the geometry.
 
-  /* No Athena Form or Viewport here, so both are plain composites: "form"
-     is the background and carries the scrollbars, "viewport" is the visible
-     area that clips "desktop".  vms.c does the geometry. */
+     All three need a size up front - Xt refuses to realize a widget of zero
+     width or height, and ScrollInit() cannot lay them out until the windows
+     exist.  It corrects all of this straight after realization. */
 
   form = XtVaCreateManagedWidget("form", compositeWidgetClass, toplevel,
 				 XtNborderWidth, 0,
 				 XtNwidth, si.framebufferWidth,
 				 XtNheight, si.framebufferHeight, NULL);
-
-  /* All three need a size up front: Xt refuses to realize a widget of zero
-     width or height, and VmsScrollInit() cannot lay them out until the
-     windows exist.  It corrects all of this straight after realization. */
 
   viewport = XtVaCreateManagedWidget("viewport", compositeWidgetClass, form,
 				     XtNborderWidth, 0,
@@ -102,25 +130,6 @@ DesktopInitBeforeRealization()
 				    XtNborderWidth, 0,
 				    XtNwidth, si.framebufferWidth,
 				    XtNheight, si.framebufferHeight, NULL);
-
-#else
-
-  form = XtVaCreateManagedWidget("form", formWidgetClass, toplevel,
-				 XtNborderWidth, 0,
-				 XtNdefaultDistance, 0, NULL);
-
-  viewport = XtVaCreateManagedWidget("viewport", viewportWidgetClass, form,
-				     XtNborderWidth, 0,
-				     NULL);
-
-  desktop = XtVaCreateManagedWidget("desktop", coreWidgetClass, viewport,
-				    XtNborderWidth, 0,
-				    NULL);
-
-  XtVaSetValues(desktop, XtNwidth, si.framebufferWidth,
-		XtNheight, si.framebufferHeight, NULL);
-
-#endif
 
   XtAddEventHandler(desktop, LeaveWindowMask|ExposureMask,
 		    True, HandleBasicDesktopEvent, NULL);
@@ -192,7 +201,7 @@ DesktopInitAfterRealization()
   gcv.foreground = 0xf0f0f0f0;
   dstGC = XCreateGC(dpy,desktopWin,GCFunction|GCForeground,&gcv);
 
-  XtAddConverter(XtRString, XtRBackingStore, XmuCvtStringToBackingStore,
+  XtAddConverter(XtRString, XtRBackingStore, CvtStringToBackingStore,
 		 NULL, 0);
 
   XtVaGetApplicationResources(desktop, (XtPointer)&attr.backing_store,
@@ -210,9 +219,7 @@ DesktopInitAfterRealization()
 
   XChangeWindowAttributes(dpy, desktopWin, valuemask, &attr);
 
-#ifdef __VMS
-  VmsScrollInit();		/* needs the windows to exist */
-#endif
+  ScrollInit();			/* needs the windows to exist */
 }
 
 
@@ -267,12 +274,9 @@ ResizeDesktopFramebuffer(int width, int height)
     XtVaSetValues(toplevel, XtNmaxWidth, width, XtNmaxHeight, height, NULL);
   }
 
-#ifdef __VMS
+  /* a bare composite has no geometry manager, so resize from the parent */
   XtResizeWidget(desktop, width, height, 0);
-  VmsScrollResize();
-#else
-  XtVaSetValues(desktop, XtNwidth, width, XtNheight, height, NULL);
-#endif
+  ScrollResize();
 
   if (!appData.fullScreen) {
     Dimension w = width, h = height;
@@ -588,14 +592,31 @@ RepaintScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
 
 /*
- * SetLocalCursorState is an action which puts the current cursor mode into
- * the label of the popup menu button.
+ * LocalCursorName returns the name of the current local cursor mode, for
+ * the F8 menu to put in its label.
+ */
+
+const char *
+LocalCursorName(void)
+{
+  return cursorModeNames[cursorMode];
+}
+
+
+/*
+ * SetLocalCursorState was an action which put the current cursor mode into
+ * the label of an Athena popup menu button.  The menu draws its own label
+ * from LocalCursorName() now, so this only does anything if someone has
+ * bound it to a widget that has a label resource.
  */
 
 void
 SetLocalCursorState(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 {
   char label[32];
+
+  if (!w || !XtIsWidget(w))
+    return;
 
   sprintf(label, "Local cursor: %s", cursorModeNames[cursorMode]);
   XtVaSetValues(w, XtNlabel, label, NULL);
@@ -617,7 +638,6 @@ CycleLocalCursor(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
   XDefineCursor(dpy, desktopWin, CursorForMode());
   fprintf(stderr, "Local cursor: %s\n", cursorModeNames[cursorMode]);
-  SetLocalCursorState(w, ev, params, num_params);
 }
 
 

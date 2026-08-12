@@ -302,27 +302,35 @@ ConvertSelection(Widget w, Atom* selection, Atom* target, Atom* type,
     return True;
   }
 
-  if (XmuConvertStandardSelection(w, CurrentTime, selection, target, type,
-				  (XPointer*)value, length, format)) {
-    if (*target == XInternAtom(dpy, "TARGETS", False)) {
-      /* add STRING to list of standard targets */
-      Atom* targetP;
-      Atom* std_targets = (Atom*)*value;
-      unsigned long std_length = *length;
+  /* The standard targets used to come from XmuConvertStandardSelection.
+     Answering the two that matter directly is shorter than the wrapping the
+     Xmu call needed, and means the viewer does not link -lXmu at all. */
 
-      *length = std_length + 1;
-      *value = (XtPointer)XtMalloc(sizeof(Atom)*(*length));
-      targetP = *(Atom**)value;
-      *targetP++ = XA_STRING;
-      memmove((char*)targetP, (char*)std_targets, sizeof(Atom)*std_length);
-      XtFree((char*)std_targets);
-      *type = XA_ATOM;
-      *format = 32;
-      return True;
-    }
+  if (*target == XInternAtom(dpy, "TARGETS", False)) {
+    Atom *targets = (Atom *)XtMalloc(sizeof(Atom) * 3);
 
+    targets[0] = XA_STRING;
+    targets[1] = XInternAtom(dpy, "TARGETS", False);
+    targets[2] = XInternAtom(dpy, "TIMESTAMP", False);
+
+    *value = (XtPointer)targets;
+    *length = 3;
+    *type = XA_ATOM;
+    *format = 32;
     return True;
   }
+
+  if (*target == XInternAtom(dpy, "TIMESTAMP", False)) {
+    Time *stamp = (Time *)XtMalloc(sizeof(Time));
+
+    *stamp = CurrentTime;
+    *value = (XtPointer)stamp;
+    *length = 1;
+    *type = XA_INTEGER;
+    *format = 32;
+    return True;
+  }
+
   return False;
 }
 

@@ -19,13 +19,14 @@ STATS = $(STATS_2:1=-DVNCSTATS)
 CC = gcc
 INCS = -Ivnc -Izlib -Ijpeg
 CFLAGS = -O2 $(INCS) -DMITSHM $(STATS)
-LDFLAGS = -lXaw -lXmu -lXt -lXext -lX11 -lm
+LDFLAGS = -lXt -lXext -lX11 -lm
 TARGET = tenoxvnc
 
 VIEWER_SRCS = vnc/argsresources.c vnc/caps.c vnc/colour.c vnc/cursor.c \
 	vnc/desktop.c vnc/dialogs.c vnc/fullscreen.c vnc/listen.c vnc/misc.c \
 	vnc/popup.c vnc/rfbproto.c vnc/selection.c vnc/shm.c vnc/sockets.c \
-	vnc/stats.c vnc/tunnel.c vnc/vncviewer.c vnc/vncauth.c vnc/d3des.c
+	vnc/stats.c vnc/tunnel.c vnc/vncviewer.c vnc/vncauth.c vnc/d3des.c \
+	vnc/xwidgets.c vnc/scroll.c
 
 # corre.c hextile.c rre.c tight.c zlib.c zrle.c are #included by rfbproto.c
 
@@ -57,42 +58,42 @@ $(TARGET): $(OBJECTS)
 
 linux:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm"
 
 macos:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/opt/X11/include $(STATS)" \
-	  LDFLAGS="-L/opt/X11/lib -lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-L/opt/X11/lib -lXt -lXext -lX11 -lm"
 
 solaris:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
-	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXaw -lXmu -lXt -lXext -lX11 -lm -lsocket -lnsl"
+	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXt -lXext -lX11 -lm -lsocket -lnsl"
 
 # hpux covers 10.20 and 11.x with native ANSI cc; needs gmake.
-# Xaw/Xmu are static archives in /usr/contrib, hence explicit -lSM -lICE.
+# Xt is a static archive in /usr/contrib, hence explicit -lSM -lICE.
 # hpux9 uses X11R5 which has no XShm headers.
 hpux:
 	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
-	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXaw -lXmu -lXt -lSM -lICE -lXext -lX11 -lm"
+	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm"
 
 hpux9:
 	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(STATS)" \
-	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXt -lXext -lX11 -lm"
 
 aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm"
 
 unixware:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm -lsocket -lnsl"
+	  LDFLAGS="-lXt -lXext -lX11 -lm -lsocket -lnsl"
 
 osf1:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm"
 
 irix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -isystem /usr/include $(STATS)" \
-	  LDFLAGS="-lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-lXt -lXext -lX11 -lm"
 
 # see sng Makefile.x11 for the irix5 native-ld story; same recipe works here:
 # compile with gcc, link with tgcware GNU ld directly (5.3 native ld can't
@@ -105,12 +106,12 @@ irix5:
 	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
 	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
 	  -L$(IRIX5_GCCLIB) -L$(IRIX5_GCCLIB)/../../.. -L/usr/lib \
-	  $(OBJECTS) -lXaw -lXmu -lXt -lXext -lX11 -lm -lgcc -lgcc_eh -lc \
+	  $(OBJECTS) -lXt -lXext -lX11 -lm -lgcc -lgcc_eh -lc \
 	  $(IRIX5_GCCLIB)/crtend.o $(IRIX5_GCCLIB)/irix-crtn.o /usr/lib/crtn.o
 
 netbsd:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include $(STATS)" \
-	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXaw -lXmu -lXt -lXext -lX11 -lm"
+	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXt -lXext -lX11 -lm"
 
 clean:
 	rm -f *.o */*.o $(TARGET)

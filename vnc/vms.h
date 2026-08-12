@@ -20,22 +20,13 @@
 /*
  * vms.h - OpenVMS declarations, included from vncviewer.h.
  *
- * DECwindows supplies Xlib, Xt R5, Xmu and Xext, but no Athena widget set
- * at all, so the parts of the viewer made of Xaw widgets are left out of
- * the VMS build: the F8 popup menu (popup.c), full-screen mode and bump
- * scrolling (fullscreen.c).  The server and password dialogs become
- * terminal prompts, and the scrolling an Xaw Viewport would have done is
- * done by vms.c.
+ * Only the C runtime differences are left here.  The viewer no longer uses
+ * Xaw or Xmu, so VMS needs nothing special for the user interface any more:
+ * DECwindows supplies the Xlib and Xt that everything is now built on.
  */
 
 #ifndef VMS_H
 #define VMS_H
-
-/*
- * Xmu itself is present as SYS$SHARE:DECW$XMULIBSHRR5.EXE and both entry
- * points we need resolve against it, but DECwindows ships no Xmu headers,
- * so declare what <X11/Xmu/Converters.h> and <X11/Xmu/StdSel.h> would have.
- */
 
 /*
  * /NAMES=UPPERCASE folds the Pause() action in misc.c onto the same external
@@ -46,22 +37,8 @@
 
 #define Pause VncPause
 
-#define XtNbackingStore "backingStore"
-#define XtCBackingStore "BackingStore"
-#define XtRBackingStore "BackingStore"
-
-extern void XmuCvtStringToBackingStore(XrmValue *args, Cardinal *num_args,
-				       XrmValue *from, XrmValue *to);
-
-extern Boolean XmuConvertStandardSelection(Widget w, Time timestamp,
-					   Atom *selection, Atom *target,
-					   Atom *type, XPointer *value,
-					   unsigned long *length, int *format);
-
 /* vms.c */
 
-extern void VmsScrollInit(void);
-extern void VmsScrollResize(void);
 extern Bool VmsSocketReady(int sock, int msec);
 extern char *VmsPrompt(const char *prompt, Bool echo);
 

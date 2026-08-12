@@ -41,9 +41,7 @@
 #include <X11/keysym.h>
 #include <X11/Xatom.h>
 #ifdef __VMS
-#include "vms.h"	/* DECwindows ships Xmu itself but not its headers */
-#else
-#include <X11/Xmu/StdSel.h>
+#include "vms.h"
 #endif
 #include "rfbproto.h"
 #include "caps.h"
@@ -187,6 +185,7 @@ extern void CycleLocalCursor(Widget w, XEvent *event, String *params,
 			     Cardinal *num_params);
 extern void SetLocalCursorState(Widget w, XEvent *event, String *params,
 				Cardinal *num_params);
+extern const char *LocalCursorName(void);
 extern void SynchroniseScreen();
 extern void ResizeDesktopFramebuffer(int width, int height);
 extern void TrackDesktopResizes(void);
@@ -237,6 +236,15 @@ extern void Cleanup();
 extern Bool RfbMulSize(size_t a, size_t b, size_t c, size_t *result);
 extern Bool RfbCheckAddSize(size_t base, size_t extra, size_t *result);
 extern Bool RfbValidServerStringLength(CARD32 len, size_t extra);
+
+/* scroll.c */
+
+extern void ScrollInit(void);
+extern void ScrollResize(void);
+extern void ScrollAllowBars(Bool on);
+extern void ScrollTo(int x, int y);
+extern void ScrollGetPos(int *x, int *y);
+extern void ScrollGetVisible(int *w, int *h);
 
 /* popup.c */
 
