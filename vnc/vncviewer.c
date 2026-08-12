@@ -100,15 +100,31 @@ main(int argc, char **argv)
   GetArgsAndResources(argc, argv);
 
   /* Unless we accepted an incoming connection, make a TCP connection to the
-     given VNC server */
+     given VNC server, and initialise the VNC connection, which includes
+     reading the password.
 
-  if (!listenSpecified) {
-    if (!ConnectToRFBServer(vncServerHost, vncServerPort)) exit(1);
+     A rejected password is worth a second chance when the connection dialog
+     is in play: the server drops the connection at that point, so the retry
+     has to redial from scratch. */
+
+  if (listenSpecified) {
+    if (!InitialiseRFBConnection()) exit(1);
+  } else {
+    while (1) {
+      if (!ConnectToRFBServer(vncServerHost, vncServerPort)) exit(1);
+
+      authFailed = False;
+      if (InitialiseRFBConnection())
+	break;
+
+      if (!authFailed || !connectDialogUsed)
+	exit(1);
+
+      close(rfbsock);
+      ForgetPassword();
+      SetServerName(DoConnectDialog("Authentication failed - try again."));
+    }
   }
-
-  /* Initialise the VNC connection, including reading the password */
-
-  if (!InitialiseRFBConnection()) exit(1);
 
   /* Create the "popup" widget - this won't actually appear on the screen until
      some user-defined event causes the "ShowPopup" action to be invoked */

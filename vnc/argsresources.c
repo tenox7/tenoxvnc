@@ -51,16 +51,9 @@ char *fallback_resources[] = {
      <KeyPress>: SendRFBEvent()\\n\
      <KeyRelease>: SendRFBEvent()",
 
-  "*serverDialog.dialog.label: VNC server:",
-  "*serverDialog.dialog.value:",
-  "*serverDialog.dialog.value.translations: #override\\n\
-     <Key>Return: ServerDialogDone()",
-
-  "*passwordDialog.dialog.label: Password:",
-  "*passwordDialog.dialog.value:",
-  "*passwordDialog.dialog.value.AsciiSink.echo: False",
-  "*passwordDialog.dialog.value.translations: #override\\n\
-     <Key>Return: PasswordDialogDone()",
+  /* The connection dialog is drawn with Xlib in dialogs.c and has no widget
+     resources of its own; the Athena serverDialog/passwordDialog specs that
+     used to be here are gone with it. */
 
   "*popup.title: TenoxVNC popup",
   "*popup*background: grey",
@@ -422,9 +415,7 @@ void
 GetArgsAndResources(int argc, char **argv)
 {
   int i;
-  char *vncServerName, *colonPos;
-  int len, portOffset;
-  int disp;
+  char *vncServerName;
 
   /* Turn app resource specs into our appData structure for the rest of the
      program to use */
@@ -462,7 +453,7 @@ GetArgsAndResources(int argc, char **argv)
   }
 
   if (argc == 1) {
-    vncServerName = DoServerDialog();
+    vncServerName = DoConnectDialog(NULL);
     appData.passwordDialog = True;
   } else if (argc != 2) {
     usage();
@@ -474,6 +465,24 @@ GetArgsAndResources(int argc, char **argv)
     if (vncServerName[0] == '-')
       usage();
   }
+
+  SetServerName(vncServerName);
+}
+
+
+/*
+ * SetServerName splits "host", "host:display" or "host::port" into
+ * vncServerHost and vncServerPort.  Split out of GetArgsAndResources so that
+ * the connection dialog can set a different server when a failed
+ * authentication is retried.
+ */
+
+void
+SetServerName(char *vncServerName)
+{
+  char *colonPos;
+  int len, portOffset;
+  int disp;
 
   if (strlen(vncServerName) > 255) {
     fprintf(stderr,"VNC server name too long\n");

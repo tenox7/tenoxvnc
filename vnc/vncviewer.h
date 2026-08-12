@@ -145,6 +145,7 @@ extern int numCmdLineOptions;
 extern void removeArgs(int *argc, char** argv, int idx, int nargs);
 extern void usage(void);
 extern void GetArgsAndResources(int argc, char **argv);
+extern void SetServerName(char *vncServerName);
 
 /* colour.c */
 
@@ -193,12 +194,15 @@ extern void DesktopSizeSupportLearned(void);
 
 /* dialogs.c */
 
+extern Bool connectDialogUsed;
+
 extern void ServerDialogDone(Widget w, XEvent *event, String *params,
 			     Cardinal *num_params);
-extern char *DoServerDialog();
 extern void PasswordDialogDone(Widget w, XEvent *event, String *params,
 			     Cardinal *num_params);
+extern char *DoConnectDialog(const char *message);
 extern char *DoPasswordDialog();
+extern void ForgetPassword(void);
 
 /* fullscreen.c */
 
@@ -256,6 +260,7 @@ extern Bool newServerCutText;
 
 extern int protocolMinorVersion;
 extern Bool tightVncProtocol;
+extern Bool authFailed;
 extern char titleEncName[];
 
 extern Bool supportsSetDesktopSize;

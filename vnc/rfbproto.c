@@ -103,6 +103,10 @@ int endianTest = 1;
 /* exported for the title bar info */
 int protocolMinorVersion;
 Bool tightVncProtocol = False;
+
+/* Set when the server rejects our password, so that main() knows to offer
+   the connection dialog again rather than just giving up. */
+Bool authFailed = False;
 char titleEncName[16] = "";
 static CapsContainer *tunnelCaps;    /* known tunneling/encryption methods */
 static CapsContainer *authCaps;	     /* known authentication schemes       */
@@ -706,9 +710,11 @@ ReadAuthenticationResult(void)
     } else {
       fprintf(stderr, "Authentication failure\n");
     }
+    authFailed = True;
     return False;
   case rfbAuthTooMany:
     fprintf(stderr, "Authentication failure, too many tries\n");
+    authFailed = True;
     return False;
   default:
     fprintf(stderr, "Unknown result of authentication (%d)\n",
