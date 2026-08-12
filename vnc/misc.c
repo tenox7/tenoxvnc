@@ -227,7 +227,6 @@ ToplevelInitAfterRealization()
     FullScreenOn();
   }
 
-  wmDeleteWindow = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
   XSetWMProtocols(dpy, XtWindow(toplevel), &wmDeleteWindow, 1);
   XtOverrideTranslations
       (toplevel, XtParseTranslationTable ("<Message>WM_PROTOCOLS: Quit()"));

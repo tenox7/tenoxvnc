@@ -92,6 +92,12 @@ main(int argc, char **argv)
 
   dpy = XtDisplay(toplevel);
 
+  /* The connection dialog below puts up a window of its own long before the
+     toplevel is realized, and it needs this to tell the window manager what
+     its close button means. */
+
+  wmDeleteWindow = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+
   /* Interpret resource specs and process any remaining command-line arguments
      (i.e. the VNC server name).  If the server name isn't specified on the
      command line, getArgsAndResources() will pop up a dialog box and wait

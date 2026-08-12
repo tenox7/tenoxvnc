@@ -1884,6 +1884,7 @@ HandleRFBServerMessage()
 	return False;
     }
 
+    RefreshPopup();
     break;
   }
 

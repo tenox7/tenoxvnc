@@ -390,6 +390,29 @@ XwHit(XwPanel *p, int x, int y)
 
 
 /*
+ * An option checkbox has no id: the panel owns it, so it toggles in place
+ * and never finishes the dialog.  A checkbox with an id is a menu entry,
+ * and its owner does the work in the activate callback.
+ */
+
+static Bool
+XwToggleCheck(XwPanel *p, int i)
+{
+  XwItem *it = &p->items[i];
+
+  if (it->kind != XW_CHECK || it->id)
+    return False;
+
+  it->state = !(it->flag ? *it->flag : it->state);
+  if (it->flag)
+    *it->flag = it->state;
+
+  XwRedraw(p);
+  return True;
+}
+
+
+/*
  * Text editing.
  */
 
@@ -438,9 +461,7 @@ XwKey(XwPanel *p, XKeyEvent *ev)
 
   case XK_Return:
   case XK_KP_Enter:
-    if (it && it->kind == XW_BUTTON)
-      p->result = it->id;
-    else if (it && it->kind == XW_CHECK)
+    if (it && (it->kind == XW_BUTTON || (it->kind == XW_CHECK && it->id)))
       p->result = it->id;
     else
       p->result = p->modal ? 1 : 0;	/* a dialog treats Return as OK */
@@ -462,6 +483,8 @@ XwKey(XwPanel *p, XKeyEvent *ev)
 
   case XK_space:
     if (it && (it->kind == XW_CHECK || it->kind == XW_BUTTON)) {
+      if (XwToggleCheck(p, p->focus))
+	return;
       p->result = it->id;
       if (!p->modal && p->activate)
 	p->activate(p->result);
@@ -557,6 +580,9 @@ XwEvent(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
       XwRedraw(p);
       return;
     }
+
+    if (XwToggleCheck(p, hit))
+      return;
 
     p->result = p->items[hit].id;
     if (!p->modal && p->activate) {

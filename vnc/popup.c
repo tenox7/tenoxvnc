@@ -55,14 +55,10 @@ enum {
 static XwPanel menu;
 static Bool menuBuilt = False;
 static Bool menuUp = False;
-static int cursorItem = -1;
+static int cursorItem = -1, cuItem = -1;
 static char cursorLabel[40];
 
 static void MenuActivate(int id);
-
-/* State the checkboxes show.  Read from the viewer each time the menu is
-   opened rather than tracked here, so it cannot drift. */
-static Bool fsState, cuState;
 
 
 /*
@@ -115,16 +111,16 @@ MenuBuild(void)
   int y = pad, rowH = xwLineH + 6;
   int w, sep1, sep2;
 
-  fsState = appData.fullScreen;
-  cuState = cuActive;
-
   XwReset(&menu);
 
-  XwAddCheck(&menu, "Full screen", &fsState, P_FULLSCREEN, pad, y);
+  /* The checkboxes point straight at the viewer's own state rather than at
+     copies, so what they show cannot drift from what is really set. */
+
+  XwAddCheck(&menu, "Full screen", &appData.fullScreen, P_FULLSCREEN, pad, y);
   y += rowH;
-  XwAddCheck(&menu, "Continuous updates", &cuState, P_CONTINUOUS, pad, y);
-  if (!supportsCU)
-    menu.items[menu.nItems - 1].disabled = True;
+  cuItem = menu.nItems;
+  XwAddCheck(&menu, "Continuous updates", &cuActive, P_CONTINUOUS, pad, y);
+  menu.items[cuItem].disabled = !supportsCU;
   y += rowH;
 
   sprintf(cursorLabel, "Local cursor: %s", LocalCursorName());
@@ -243,9 +239,34 @@ HidePopup(Widget w, XEvent *event, String *params, Cardinal *num_params)
 
 
 /*
+ * RefreshPopup re-reads what the menu shows and repaints it.  Some of that
+ * changes behind the menu's back: switching continuous updates off only
+ * takes effect when the server answers with EndOfContinuousUpdates, and the
+ * same message is what announces support for them in the first place.
+ */
+
+void
+RefreshPopup(void)
+{
+  if (!menuUp)
+    return;
+
+  if (cuItem >= 0)
+    menu.items[cuItem].disabled = !supportsCU;
+
+  if (cursorItem >= 0) {
+    sprintf(cursorLabel, "Local cursor: %s", LocalCursorName());
+    menu.items[cursorItem].label = cursorLabel;
+  }
+
+  XwRedraw(&menu);
+}
+
+
+/*
  * MenuActivate is called by xwidgets the moment something is clicked.  It
  * cannot rebuild the panel, since it runs inside that panel's own event
- * handler, so the one entry with a changing label updates it in place.
+ * handler, so entries that change update in place through RefreshPopup().
  */
 
 static void
@@ -260,16 +281,12 @@ MenuActivate(int id)
 
   case P_CONTINUOUS:
     RunAction("ToggleContinuousUpdates", NULL, 0);
-    cuState = cuActive;
-    XwRedraw(&menu);
+    RefreshPopup();
     return;
 
   case P_CURSOR:
     RunAction("CycleLocalCursor", NULL, 0);
-    sprintf(cursorLabel, "Local cursor: %s", LocalCursorName());
-    if (cursorItem >= 0)
-      menu.items[cursorItem].label = cursorLabel;
-    XwRedraw(&menu);
+    RefreshPopup();
     return;
 
   case P_CLIP_OUT: {

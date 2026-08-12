@@ -341,6 +341,11 @@ HandleToplevelConfigure(Widget w, XtPointer ptr, XEvent *ev, Boolean *cont)
   if (ev->type != ConfigureNotify)
     return;
 
+  /* Full-screen resizes the window to the local screen; that is our own
+     doing, not the user asking for a different desktop size. */
+  if (appData.fullScreen)
+    return;
+
   ScheduleRemoteResize(ev->xconfigure.width, ev->xconfigure.height);
 }
 
@@ -368,6 +373,11 @@ DesktopSizeSupportLearned(void)
     return;
 
   XtVaSetValues(toplevel, XtNmaxWidth, 32767, XtNmaxHeight, 32767, NULL);
+
+  /* The window is the size of the screen while full-screen, which says
+     nothing about what the desktop should be. */
+  if (appData.fullScreen)
+    return;
 
   XtVaGetValues(toplevel, XtNwidth, &w, XtNheight, &h, NULL);
   ScheduleRemoteResize(w, h);

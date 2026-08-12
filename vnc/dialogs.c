@@ -48,19 +48,16 @@ static char numCompress[NUM_LEN + 1];
 
 
 /*
- * These two are still named in the actions table in argsresources.c.  The
- * dialog handles its own keys, so they do nothing.
+ * CancelDialog is what the window manager's close button does to the dialog:
+ * the same as pressing Cancel.  The dialog handles the rest of its own keys
+ * and buttons itself.
  */
 
 void
-ServerDialogDone(Widget w, XEvent *event, String *params, Cardinal *num_params)
+CancelDialog(Widget w, XEvent *event, String *params, Cardinal *num_params)
 {
-}
-
-void
-PasswordDialogDone(Widget w, XEvent *event, String *params,
-		   Cardinal *num_params)
-{
+  dlg.result = RES_CANCEL;
+  dlg.done = True;
 }
 
 

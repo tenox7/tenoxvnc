@@ -115,6 +115,8 @@ ToggleFullScreen(Widget w, XEvent *ev, String *params, Cardinal *num_params)
     FullScreenOff();
   else
     FullScreenOn();
+
+  RefreshPopup();		/* in case something else asked for this */
 }
 
 

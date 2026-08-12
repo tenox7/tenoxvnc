@@ -195,10 +195,8 @@ extern void DesktopSizeSupportLearned(void);
 
 extern Bool connectDialogUsed;
 
-extern void ServerDialogDone(Widget w, XEvent *event, String *params,
-			     Cardinal *num_params);
-extern void PasswordDialogDone(Widget w, XEvent *event, String *params,
-			     Cardinal *num_params);
+extern void CancelDialog(Widget w, XEvent *event, String *params,
+			 Cardinal *num_params);
 extern char *DoConnectDialog(const char *message);
 extern char *DoPasswordDialog();
 extern void ForgetPassword(void);
@@ -254,6 +252,7 @@ extern void ShowPopup(Widget w, XEvent *event, String *params,
 extern void HidePopup(Widget w, XEvent *event, String *params,
 		      Cardinal *num_params);
 extern void CreatePopup();
+extern void RefreshPopup(void);
 
 /* rfbproto.c */
 
