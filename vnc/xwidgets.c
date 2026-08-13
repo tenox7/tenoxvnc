@@ -689,7 +689,10 @@ XwKey(XwPanel *p, XKeyEvent *ev)
     }
     return;
   case XK_Delete:
+  /* the XK_KP_Home..XK_KP_Delete block postdates X11R4 (OpenWindows 3) */
+#ifdef XK_KP_Delete
   case XK_KP_Delete:
+#endif
     if (it->caret < len)
       memmove(it->buf + it->caret, it->buf + it->caret + 1, len - it->caret);
     return;

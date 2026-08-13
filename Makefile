@@ -35,7 +35,7 @@ all:
 	case "$$s" in \
 	  Linux)   t=linux;; \
 	  Darwin)  t=macos;; \
-	  SunOS)   t=solaris;; \
+	  SunOS)   case "$$r" in 4.*) t=sunos4;; *) t=solaris;; esac;; \
 	  AIX)     t=aix;; \
 	  OSF1)    t=osf1;; \
 	  NetBSD)  t=netbsd;; \
@@ -69,6 +69,11 @@ macos:
 solaris:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
 	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
+
+# OpenWindows 3 is X11R4. Sockets are in libc and ld records -L for ld.so.
+sunos4:
+	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
+	  LDFLAGS="-L/usr/openwin/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 # All HP-UX targets need gmake. 9 and 10 use the native ANSI cc, 11 uses gcc.
 # hpux9 uses X11R5 which has no XShm headers.
@@ -130,4 +135,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris hpux9 hpux10 hpux11 aix unixware osf1 irix irix5 netbsd
+.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osf1 irix irix5 netbsd

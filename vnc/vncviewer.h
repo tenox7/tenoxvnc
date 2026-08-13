@@ -32,6 +32,12 @@
 #include <sys/select.h>	/* AIX keeps fd_set here, not in types.h/time.h */
 #include <strings.h>	/* FD_ZERO expands to bzero() */
 #endif
+/* SunOS 4 libc is BSD: no ANSI memmove, but bcopy is defined to handle
+   overlapping copies.  Its headers prototype neither. */
+#if defined(sun) && !defined(__SVR4) && !defined(__svr4__)
+void bcopy();
+#define memmove(d, s, n) bcopy((s), (d), (n))
+#endif
 #include <unistd.h>
 #include <pwd.h>
 #include <X11/IntrinsicP.h>

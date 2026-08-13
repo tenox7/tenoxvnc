@@ -84,7 +84,8 @@ CvtStringToBackingStore(XrmValue *args, Cardinal *num_args, XrmValue *from,
     result = Always;
   }
 
-  to->addr = (XPointer)&result;
+  /* not XPointer: X11R4 (OpenWindows 3) has no such typedef, addr is caddr_t */
+  to->addr = (char *)&result;
   to->size = sizeof(result);
 }
 
