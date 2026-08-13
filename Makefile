@@ -39,7 +39,7 @@ all:
 	  AIX)     t=aix;; \
 	  OSF1)    t=osf1;; \
 	  NetBSD)  t=netbsd;; \
-	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *) t=hpux;; esac;; \
+	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *.10.*) t=hpux10;; *) t=hpux11;; esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix5;; *) t=irix;; esac;; \
 	  UnixWare|UNIX_SV|SCO_SV) t=unixware;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
@@ -70,16 +70,27 @@ solaris:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
 	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
-# hpux covers 10.20 and 11.x with native ANSI cc; needs gmake.
-# Xt is a static archive in /usr/contrib, hence explicit -lSM -lICE.
+# All HP-UX targets need gmake. 9 and 10 use the native ANSI cc, 11 uses gcc.
 # hpux9 uses X11R5 which has no XShm headers.
-hpux:
-	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
-	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
-
 hpux9:
 	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(STATS)" \
 	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXt -lXext -lX11 -lm" $(TARGET)
+
+# On 10.20 Xt is a static archive in /usr/contrib, hence explicit -lSM -lICE.
+hpux10:
+	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
+	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
+
+# 11i keeps all X11 headers in /usr/include/X11 and ships the shared libs only
+# as /usr/lib/X11R6/libFOO.<N> — there are no libFOO.sl aliases, so ld cannot
+# resolve -lXt and the libraries have to be named by full path.
+HPUX11_X11 = /usr/lib/X11R6
+HPUX11_XLIBS = $(HPUX11_X11)/libXt.3 $(HPUX11_X11)/libSM.2 $(HPUX11_X11)/libICE.2 \
+  $(HPUX11_X11)/libXext.3 $(HPUX11_X11)/libX11.3
+
+hpux11:
+	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	  LDFLAGS="$(HPUX11_XLIBS) -lm" $(TARGET)
 
 aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
@@ -119,4 +130,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris hpux hpux9 aix unixware osf1 irix irix5 netbsd
+.PHONY: all clean install linux macos solaris hpux9 hpux10 hpux11 aix unixware osf1 irix irix5 netbsd
