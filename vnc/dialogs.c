@@ -52,6 +52,24 @@ static const int depthVals[] = { 0, 8, 15, 16, 24, 32 };
 static const int qualityVals[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 static const int levelVals[] = { -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 
+/* The two radio groups.  Auto leaves the encoding to the viewer, which is
+   what the viewer has always done; the rest of the encodings the viewer can
+   decode are still reachable with -encodings, they are just not worth a
+   button here.  The colour levels are all the server can be asked for. */
+static const char *const encNames[] = {
+  "Auto", "Tight", "ZRLE", "Hextile", "Raw"
+};
+static const int encVals[] = {
+  -1, rfbEncodingTight, rfbEncodingZRLE, rfbEncodingHextile, rfbEncodingRaw
+};
+
+static const char *const colourNames[] = {
+  "Full", "Medium", "Low", "Very low"
+};
+static const int colourVals[] = {
+  COLOUR_FULL, COLOUR_MEDIUM, COLOUR_LOW, COLOUR_VERYLOW
+};
+
 
 /*
  * CancelDialog is what the window manager's close button does to the dialog:
@@ -67,13 +85,37 @@ CancelDialog(Widget w, XEvent *event, String *params, Cardinal *num_params)
 }
 
 
+/*
+ * A radio group is laid out as a grid rather than a column, which would make
+ * the dialog far taller than it needs to be.  cellW is the column pitch: the
+ * group's own, from DlgCellW, unless it sits above rows of checkboxes, in
+ * which case it takes theirs so that the columns line up down the section.
+ * DlgRadios returns the y just below the last row.
+ */
+
 static int
-Max4(int a, int b, int c, int d)
+DlgCellW(const char *const *names, int n)
 {
-  if (b > a) a = b;
-  if (c > a) a = c;
-  if (d > a) a = d;
-  return a;
+  int i, w = 0;
+
+  for (i = 0; i < n; i++)
+    if (XwCheckW(names[i]) > w)
+      w = XwCheckW(names[i]);
+
+  return w + xwCharW * 2;
+}
+
+static int
+DlgRadios(const char *const *names, const int *vals, int n, int *value,
+	  int ncols, int cellW, int x, int y, int rowH)
+{
+  int i;
+
+  for (i = 0; i < n; i++)
+    XwAddRadio(&dlg, names[i], value, vals[i],
+	       x + (i % ncols) * cellW, y + (i / ncols) * rowH);
+
+  return y + ((n + ncols - 1) / ncols) * rowH;
 }
 
 static void
@@ -106,9 +148,9 @@ DlgBuild(Bool withOptions)
   if (withOptions) {
     /* The second column has to clear the widest checkbox that shares a row
        with it, not the widest overall - the long ones sit alone. */
-    col2 = col1 + Max4(XwCheckW("Shared"), XwCheckW("BGR233"),
-		       XwCheckW("Own colormap"), XwCheckW("JPEG"))
-	   + xwCharW * 2;
+    col2 = col1 + xwCharW * 2;
+    col2 += XwCheckW("Shared") > XwCheckW("True colour")
+	    ? XwCheckW("Shared") : XwCheckW("True colour");
 
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Session:", pad, y);
@@ -129,6 +171,9 @@ DlgBuild(Bool withOptions)
 
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Encoding:", pad, y);
+    y = DlgRadios(encNames, encVals, XtNumber(encNames),
+		  &appData.preferredEncoding, 3,
+		  DlgCellW(encNames, XtNumber(encNames)), col1, y, rowH);
     XwAddCheck(&dlg, "JPEG", &appData.enableJPEG, 0, col1, y);
     y += rowH;
     XwAddLabel(&dlg, "Quality", pad, y + 1)->enableIf = &appData.enableJPEG;
@@ -145,10 +190,10 @@ DlgBuild(Bool withOptions)
 
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Colour:", pad, y);
-    XwAddCheck(&dlg, "BGR233", &appData.useBGR233, 0, col1, y);
-    XwAddCheck(&dlg, "True colour", &appData.forceTrueColour, 0, col2, y);
-    y += rowH;
-    XwAddCheck(&dlg, "Own colormap", &appData.forceOwnCmap, 0, col1, y);
+    y = DlgRadios(colourNames, colourVals, XtNumber(colourNames),
+		  &appData.colourLevel, 2, col2 - col1, col1, y, rowH);
+    XwAddCheck(&dlg, "True colour", &appData.forceTrueColour, 0, col1, y);
+    XwAddCheck(&dlg, "Own colormap", &appData.forceOwnCmap, 0, col2, y);
     y += rowH;
     XwAddLabel(&dlg, "Depth", pad, y + 1)->enableIf = &appData.forceTrueColour;
     slider[2] = dlg.nItems;

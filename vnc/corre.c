@@ -65,7 +65,7 @@ HandleCoRREBPP (int rx, int ry, int rw, int rh)
 	return False;
 
 #if (BPP == 8)
-    gcv.foreground = (appData.useBGR233 ? BGR233ToPixel[pix] : pix);
+    gcv.foreground = (useColourMap ? colourToPixel[pix] : pix);
 #else
     gcv.foreground = pix;
 #endif
@@ -87,7 +87,7 @@ HandleCoRREBPP (int rx, int ry, int rw, int rh)
 	h = *ptr++;
 
 #if (BPP == 8)
-	gcv.foreground = (appData.useBGR233 ? BGR233ToPixel[pix] : pix);
+	gcv.foreground = (useColourMap ? colourToPixel[pix] : pix);
 #else
 	gcv.foreground = pix;
 #endif

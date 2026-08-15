@@ -53,7 +53,7 @@ HandleRREBPP (int rx, int ry, int rw, int rh)
     return False;
 
 #if (BPP == 8)
-  gcv.foreground = (appData.useBGR233 ? BGR233ToPixel[pix] : pix);
+  gcv.foreground = (useColourMap ? colourToPixel[pix] : pix);
 #else
   gcv.foreground = pix;
 #endif
@@ -74,7 +74,7 @@ HandleRREBPP (int rx, int ry, int rw, int rh)
     subrect.h = Swap16IfLE(subrect.h);
 
 #if (BPP == 8)
-    gcv.foreground = (appData.useBGR233 ? BGR233ToPixel[pix] : pix);
+    gcv.foreground = (useColourMap ? colourToPixel[pix] : pix);
 #else
     gcv.foreground = pix;
 #endif

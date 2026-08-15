@@ -191,17 +191,12 @@ ToplevelInitBeforeRealization()
 void
 UpdateWindowTitle(void)
 {
-  char depth[16], info[96];
+  char info[96];
   char *title, *name;
-
-  if (appData.useBGR233)
-    strcpy(depth, "bgr233");
-  else
-    sprintf(depth, "%dbit", visdepth);
 
   sprintf(info, "%s%s%s 3.%d%s%s",
 	  titleEncName[0] ? titleEncName : "", titleEncName[0] ? " " : "",
-	  depth, protocolMinorVersion, tightVncProtocol ? "t" : "",
+	  ColourModeName(), protocolMinorVersion, tightVncProtocol ? "t" : "",
 	  appData.viewOnly ? " ro" : "");
 
   name = (desktopName && desktopName[0]) ? desktopName : "TenoxVNC";

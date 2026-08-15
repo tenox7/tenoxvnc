@@ -1241,8 +1241,15 @@ BuildConnectionItems(void)
 	  appData.enableJPEG ? " +jpeg" : "");
   AddItem("Encoding", v);
 
-  AddItem("Requested", appData.encodingsString ? appData.encodingsString :
-	  "auto (tight zrle hextile zlib corre rre)");
+  if (appData.encodingsString)
+    AddItem("Requested", appData.encodingsString);
+  else if (appData.preferredEncoding >= 0) {
+    sprintf(v, "%s first, then the rest",
+	    EncodingName(appData.preferredEncoding));
+    AddItem("Requested", v);
+  } else {
+    AddItem("Requested", "auto (tight zrle hextile zlib corre rre)");
+  }
 
   sprintf(v, "zlib level %d, jpeg quality %d", appData.compressLevel,
 	  appData.qualityLevel);
@@ -1254,7 +1261,7 @@ BuildConnectionItems(void)
   AddItem("Server format", v);
 
   sprintf(v, "%d bpp, depth %d, %s", myFormat.bitsPerPixel, myFormat.depth,
-	  appData.useBGR233 ? "bgr233" :
+	  useColourMap ? ColourModeName() :
 	  (myFormat.trueColour ? "true colour" : "colour map"));
   AddItem("Client format", v);
 

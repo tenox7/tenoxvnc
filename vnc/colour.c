@@ -28,22 +28,62 @@
 
 #define INVALID_PIXEL 0xffffffff
 #define MAX_CMAP_SIZE 256
-#define BGR233_SIZE 256
-unsigned long BGR233ToPixel[BGR233_SIZE];
+#define COLOUR_MAP_SIZE 256
+unsigned long colourToPixel[COLOUR_MAP_SIZE];
+Bool useColourMap = False;
 
 Colormap cmap;
 Visual *vis;
 unsigned int visdepth, visbpp;
 Bool allocColorFailed = False;
 
-static int nBGR233ColoursAllocated;
+/* The reduced colour formats, indexed by COLOUR_FULL..COLOUR_VERYLOW.  All
+   are 8 bits per pixel with the components packed low to high in red, green,
+   blue order, which is what makes the 256-colour one BGR233. */
+static const struct {
+  int redMax, greenMax, blueMax;
+} colourLevels[] = {
+  { 0, 0, 0 },			/* COLOUR_FULL - not a reduced format */
+  { 7, 7, 3 },			/* COLOUR_MEDIUM */
+  { 3, 3, 3 },			/* COLOUR_LOW */
+  { 1, 1, 1 }			/* COLOUR_VERYLOW */
+};
+
+static int nColoursAllocated;
 
 static Bool GetPseudoColorVisualAndCmap(int depth);
 static Bool GetTrueColorVisualAndCmap(int depth);
 static int GetBPPForDepth(int depth);
-static void SetupBGR233Map();
-static void AllocateExactBGR233Colours();
-static Bool AllocateBGR233Colour(int r, int g, int b);
+static void SetReducedFormat(int level);
+static void SetupColourMap();
+static void AllocateExactColours();
+static Bool AllocateColour(int r, int g, int b);
+
+
+/*
+ * Bits() is how many bits a component with this maximum value needs, and
+ * ColourIndex() packs a colour into the pixel the server will send us for it.
+ */
+
+static int
+Bits(int max)
+{
+  int n = 0;
+
+  while (max) {
+    n++;
+    max >>= 1;
+  }
+  return n;
+}
+
+static unsigned int
+ColourIndex(int r, int g, int b)
+{
+  return ((unsigned int)r << myFormat.redShift) |
+	 ((unsigned int)g << myFormat.greenShift) |
+	 ((unsigned int)b << myFormat.blueShift);
+}
 
 
 /*
@@ -65,10 +105,11 @@ static Bool AllocateBGR233Colour(int r, int g, int b);
  * will be used.
  *
  * Otherwise, we use the X server's default visual and colormap.  If this is
- * TrueColor then we just ask the RFB server for this format.  If the default
- * isn't TrueColor, or if useBGR233 is true, then we ask the RFB server for
- * BGR233 pixel format and use a lookup table to translate to the nearest
- * colours provided by the X server.
+ * TrueColor and full colour was asked for then we just ask the RFB server for
+ * this format.  If the default isn't TrueColor, or if a reduced colour level
+ * was asked for, then we ask the RFB server for an 8-bit format of that many
+ * colours and use a lookup table to translate to the nearest colours provided
+ * by the X server.
  */
 
 void
@@ -97,7 +138,7 @@ SetVisualAndCmap()
   visbpp = GetBPPForDepth(visdepth);
   cmap = DefaultColormap(dpy,DefaultScreen(dpy));
 
-  if (!appData.useBGR233 && (vis->class == TrueColor)) {
+  if (appData.colourLevel == COLOUR_FULL && vis->class == TrueColor) {
 
     myFormat.bitsPerPixel = visbpp;
     myFormat.depth = visdepth;
@@ -116,24 +157,63 @@ SetVisualAndCmap()
     return;
   }
 
-  appData.useBGR233 = True;
+  /* A default visual that isn't TrueColor cannot show full colour at all, so
+     fall back to the 256-colour format the way the viewer always has. */
+  if (appData.colourLevel == COLOUR_FULL)
+    appData.colourLevel = COLOUR_MEDIUM;
 
-  myFormat.bitsPerPixel = 8;
-  myFormat.depth = 8;
-  myFormat.trueColour = 1;
-  myFormat.bigEndian = 0;
-  myFormat.redMax = 7;
-  myFormat.greenMax = 7;
-  myFormat.blueMax = 3;
-  myFormat.redShift = 0;
-  myFormat.greenShift = 3;
-  myFormat.blueShift = 6;
+  SetReducedFormat(appData.colourLevel);
 
   fprintf(stderr,
-       "Using default colormap and translating from BGR233.  Pixel format:\n");
+	  "Using default colormap and translating from %s.  Pixel format:\n",
+	  ColourModeName());
   PrintPixelFormat(&myFormat);
 
-  SetupBGR233Map();
+  SetupColourMap();
+}
+
+
+/*
+ * SetReducedFormat asks the server for one of the 8bpp formats in
+ * colourLevels[], which we then have to translate through colourToPixel[].
+ */
+
+static void
+SetReducedFormat(int level)
+{
+  useColourMap = True;
+
+  myFormat.bitsPerPixel = 8;
+  myFormat.trueColour = 1;
+  myFormat.bigEndian = 0;
+  myFormat.redMax = colourLevels[level].redMax;
+  myFormat.greenMax = colourLevels[level].greenMax;
+  myFormat.blueMax = colourLevels[level].blueMax;
+  myFormat.redShift = 0;
+  myFormat.greenShift = Bits(myFormat.redMax);
+  myFormat.blueShift = myFormat.greenShift + Bits(myFormat.greenMax);
+  myFormat.depth = myFormat.blueShift + Bits(myFormat.blueMax);
+}
+
+
+/*
+ * ColourModeName is how the colours are being got, for the window title and
+ * the diagnostics.  Reduced formats are named the way BGR233 always has been,
+ * counting the bits from the top of the pixel down.
+ */
+
+const char *
+ColourModeName(void)
+{
+  static char name[16];
+
+  if (!useColourMap)
+    sprintf(name, "%dbit", visdepth);
+  else
+    sprintf(name, "bgr%d%d%d", Bits(myFormat.blueMax),
+	    Bits(myFormat.greenMax), Bits(myFormat.redMax));
+
+  return name;
 }
 
 
@@ -291,49 +371,52 @@ GetBPPForDepth(int depth)
 
 
 
+
 /*
- * SetupBGR233Map() sets up the BGR233ToPixel array.
+ * SetupColourMap() sets up the colourToPixel array.
  *
- * It calls AllocateExactBGR233Colours to allocate some exact BGR233 colours
- * (limited by space in the colormap and/or by the value of the nColours
- * resource).  If the number allocated is less than BGR233_SIZE then it fills
- * the rest in using the "nearest" colours available.  How this is done depends
- * on the value of the useSharedColours resource.  If it's false, we use only
- * colours from the exact BGR233 colours we've just allocated.  If it's true,
- * then we also use other clients' "shared" colours available in the colormap.
+ * It calls AllocateExactColours to allocate some exact colours from the cube
+ * the server is going to send us (limited by space in the colormap and/or by
+ * the value of the nColours resource).  If the number allocated is less than
+ * the whole cube then it fills the rest in using the "nearest" colours
+ * available.  How this is done depends on the value of the useSharedColours
+ * resource.  If it's false, we use only colours from the exact colours we've
+ * just allocated.  If it's true, then we also use other clients' "shared"
+ * colours available in the colormap.
  */
 
 static void
-SetupBGR233Map()
+SetupColourMap()
 {
   int r, g, b;
   long i;
   unsigned long nearestPixel = 0;
   int cmapSize;
+  int cubeSize = 1 << myFormat.depth;
   XColor cmapEntry[MAX_CMAP_SIZE];
-  Bool exactBGR233[MAX_CMAP_SIZE];
+  Bool exact[MAX_CMAP_SIZE];
   Bool shared[MAX_CMAP_SIZE];
   Bool usedAsNearest[MAX_CMAP_SIZE];
   int nSharedUsed = 0;
 
   if (visdepth > 8) {
-    appData.nColours = 256; /* ignore nColours setting for > 8-bit deep */
+    appData.nColours = cubeSize; /* ignore nColours setting for > 8-bit deep */
   }
 
-  for (i = 0; i < BGR233_SIZE; i++) {
-    BGR233ToPixel[i] = INVALID_PIXEL;
+  for (i = 0; i < COLOUR_MAP_SIZE; i++) {
+    colourToPixel[i] = INVALID_PIXEL;
   }
 
-  AllocateExactBGR233Colours();
+  AllocateExactColours();
 
-  fprintf(stderr,"Got %d exact BGR233 colours out of %d\n",
-	  nBGR233ColoursAllocated, appData.nColours);
+  fprintf(stderr,"Got %d exact %s colours out of %d\n",
+	  nColoursAllocated, ColourModeName(), appData.nColours);
 
-  if (nBGR233ColoursAllocated < BGR233_SIZE) {
+  if (nColoursAllocated < cubeSize) {
 
     if (visdepth > 8) { /* shouldn't get here */
-      fprintf(stderr,"Error: couldn't allocate BGR233 colours even though "
-	      "depth is %d\n", visdepth);
+      fprintf(stderr,"Error: couldn't allocate %s colours even though "
+	      "depth is %d\n", ColourModeName(), visdepth);
       exit(1);
     }
 
@@ -341,18 +424,18 @@ SetupBGR233Map()
 
     for (i = 0; i < cmapSize; i++) {
       cmapEntry[i].pixel = i;
-      exactBGR233[i] = False;
+      exact[i] = False;
       shared[i] = False;
       usedAsNearest[i] = False;
     }
 
     XQueryColors(dpy, cmap, cmapEntry, cmapSize);
 
-    /* mark all our exact BGR233 pixels */
+    /* mark all the pixels we got exactly */
 
-    for (i = 0; i < BGR233_SIZE; i++) {
-      if (BGR233ToPixel[i] != INVALID_PIXEL)
-	exactBGR233[BGR233ToPixel[i]] = True;
+    for (i = 0; i < cubeSize; i++) {
+      if (colourToPixel[i] != INVALID_PIXEL)
+	exact[colourToPixel[i]] = True;
     }
 
     if (appData.useSharedColours) {
@@ -371,7 +454,7 @@ SetupBGR233Map()
 	 pixel.  Got that? */
 
       for (i = cmapSize-1; i >= 0; i--) {
-	if (!exactBGR233[i] &&
+	if (!exact[i] &&
 	    XAllocColor(dpy, cmap, &cmapEntry[i])) {
 
 	  if (cmapEntry[i].pixel == i) {
@@ -391,19 +474,19 @@ SetupBGR233Map()
 
     /* Now fill in the nearest colours */
 
-    for (r = 0; r < 8; r++) {
-      for (g = 0; g < 8; g++) {
-	for (b = 0; b < 4; b++) {
-	  if (BGR233ToPixel[(b<<6) | (g<<3) | r] == INVALID_PIXEL) {
+    for (r = 0; r <= myFormat.redMax; r++) {
+      for (g = 0; g <= myFormat.greenMax; g++) {
+	for (b = 0; b <= myFormat.blueMax; b++) {
+	  if (colourToPixel[ColourIndex(r,g,b)] == INVALID_PIXEL) {
 
 	    unsigned long minDistance = ULONG_MAX;
 
 	    for (i = 0; i < cmapSize; i++) {
-	      if (exactBGR233[i] || shared[i]) {
+	      if (exact[i] || shared[i]) {
 		unsigned long distance
-		  = (abs(cmapEntry[i].red - r * 65535 / 7)
-		     + abs(cmapEntry[i].green - g * 65535 / 7)
-		     + abs(cmapEntry[i].blue - b * 65535 / 3));
+		  = (abs(cmapEntry[i].red - r * 65535 / myFormat.redMax)
+		     + abs(cmapEntry[i].green - g * 65535 / myFormat.greenMax)
+		     + abs(cmapEntry[i].blue - b * 65535 / myFormat.blueMax));
 
 		if (distance < minDistance) {
 		  minDistance = distance;
@@ -412,7 +495,7 @@ SetupBGR233Map()
 	      }
 	    }
 
-	    BGR233ToPixel[(b<<6) | (g<<3) | r] = nearestPixel;
+	    colourToPixel[ColourIndex(r,g,b)] = nearestPixel;
 	    if (shared[nearestPixel] && !usedAsNearest[nearestPixel])
 	      nSharedUsed++;
 	    usedAsNearest[nearestPixel] = True;
@@ -435,17 +518,17 @@ SetupBGR233Map()
 
 
 /*
- * AllocateExactBGR233Colours() attempts to allocate each of the colours in the
- * BGR233 colour cube, stopping when an allocation fails.  The order it does
- * this in is such that we should get a fairly well spread subset of the cube,
- * however many allocations are made.  There's probably a neater algorithm for
- * doing this, but it's not obvious to me anyway.  The way this algorithm works
- * is:
+ * AllocateExactColours() attempts to allocate each of the colours in the
+ * colour cube, stopping when an allocation fails.  The order it does this in
+ * is such that we should get a fairly well spread subset of the cube, however
+ * many allocations are made.  There's probably a neater algorithm for doing
+ * this, but it's not obvious to me anyway.  The way this algorithm works is:
  *
  * At each stage, we introduce a new value for one of the primaries, and
  * allocate all the colours with the new value of that primary and all previous
  * values of the other two primaries.  We start with r=0 as the "new" value
- * for r, and g=0, b=0 as the "previous" values of g and b.  So we get:
+ * for r, and g=0, b=0 as the "previous" values of g and b.  So for BGR233 we
+ * get:
  *
  * New primary value   Previous values of other primaries   Colours allocated
  * -----------------   ----------------------------------   -----------------
@@ -462,52 +545,68 @@ SetupBGR233Map()
  *                                                          r7 g3 b0
  *                                                          r7 g3 b3
  * ....etc.
+ *
+ * The value orders come from SpreadOrder(): the ends of the range first and
+ * then its bisections, so that whichever value a primary stops at, the ones
+ * taken so far are spread over the whole range rather than bunched at one end.
  * */
 
-static void
-AllocateExactBGR233Colours()
+static const int *
+SpreadOrder(int max)
 {
-  int rv[] = {0,7,3,5,1,6,2,4};
-  int gv[] = {0,7,3,5,1,6,2,4};
-  int bv[] = {0,3,1,2};
+  static const int order8[] = {0,7,3,5,1,6,2,4};
+  static const int order4[] = {0,3,1,2};
+  static const int order2[] = {0,1};
+
+  if (max == 7)
+    return order8;
+  if (max == 3)
+    return order4;
+  return order2;
+}
+
+static void
+AllocateExactColours()
+{
+  const int *rv = SpreadOrder(myFormat.redMax);
+  const int *gv = SpreadOrder(myFormat.greenMax);
+  const int *bv = SpreadOrder(myFormat.blueMax);
+  int nr = myFormat.redMax + 1;
+  int ng = myFormat.greenMax + 1;
+  int nb = myFormat.blueMax + 1;
   int rn = 0;
   int gn = 1;
   int bn = 1;
   int ri, gi, bi;
 
-  nBGR233ColoursAllocated = 0;
+  nColoursAllocated = 0;
 
-  while (1) {
-    if (rn == 8)
-      break;
+  while (rn < nr || gn < ng || bn < nb) {
 
-    ri = rn;
-    for (gi = 0; gi < gn; gi++) {
-      for (bi = 0; bi < bn; bi++) {
-	if (!AllocateBGR233Colour(rv[ri], gv[gi], bv[bi]))
-	  return;
+    if (rn < nr) {
+      for (gi = 0; gi < gn; gi++) {
+	for (bi = 0; bi < bn; bi++) {
+	  if (!AllocateColour(rv[rn], gv[gi], bv[bi]))
+	    return;
+	}
       }
+      rn++;
     }
-    rn++;
 
-    if (gn == 8)
-      break;
-
-    gi = gn;
-    for (ri = 0; ri < rn; ri++) {
-      for (bi = 0; bi < bn; bi++) {
-	if (!AllocateBGR233Colour(rv[ri], gv[gi], bv[bi]))
-	  return;
+    if (gn < ng) {
+      for (ri = 0; ri < rn; ri++) {
+	for (bi = 0; bi < bn; bi++) {
+	  if (!AllocateColour(rv[ri], gv[gn], bv[bi]))
+	    return;
+	}
       }
+      gn++;
     }
-    gn++;
 
-    if (bn < 4) {
-
-      bi = bn;
+    if (bn < nb) {
       for (ri = 0; ri < rn; ri++) {
 	for (gi = 0; gi < gn; gi++) {
-	  if (!AllocateBGR233Colour(rv[ri], gv[gi], bv[bi]))
+	  if (!AllocateColour(rv[ri], gv[gi], bv[bn]))
 	    return;
 	}
       }
@@ -518,31 +617,31 @@ AllocateExactBGR233Colours()
 
 
 /*
- * AllocateBGR233Colour() attempts to allocate the given BGR233 colour as a
- * shared colormap entry, storing its pixel value in the BGR233ToPixel array.
- * r is from 0 to 7, g from 0 to 7 and b from 0 to 3.  It fails either when the
- * allocation fails or when we would exceed the number of colours specified in
- * the nColours resource.
+ * AllocateColour() attempts to allocate the given colour as a shared colormap
+ * entry, storing its pixel value in the colourToPixel array.  r, g and b run
+ * from 0 to the maximum for that primary in the format we asked the server
+ * for.  It fails either when the allocation fails or when we would exceed the
+ * number of colours specified in the nColours resource.
  */
 
 static Bool
-AllocateBGR233Colour(int r, int g, int b)
+AllocateColour(int r, int g, int b)
 {
   XColor c;
 
-  if (nBGR233ColoursAllocated >= appData.nColours)
+  if (nColoursAllocated >= appData.nColours)
     return False;
 
-  c.red = r * 65535 / 7;
-  c.green = g * 65535 / 7;
-  c.blue = b * 65535 / 3;
+  c.red = r * 65535 / myFormat.redMax;
+  c.green = g * 65535 / myFormat.greenMax;
+  c.blue = b * 65535 / myFormat.blueMax;
 
   if (!XAllocColor(dpy, cmap, &c))
     return False;
 
-  BGR233ToPixel[(b<<6) | (g<<3) | r] = c.pixel;
+  colourToPixel[ColourIndex(r,g,b)] = c.pixel;
 
-  nBGR233ColoursAllocated++;
+  nColoursAllocated++;
 
   return True;
 }

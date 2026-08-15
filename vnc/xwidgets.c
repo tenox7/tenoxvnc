@@ -104,7 +104,8 @@ XwStrW(const char *s)
   return XTextWidth(xwFont, s, strlen(s));
 }
 
-/* what a checkbox needs: the box, a gap, then the label */
+/* what a checkbox needs: the box, a gap, then the label.  A radio button is
+   the same size, so it uses this too. */
 int
 XwCheckW(const char *s)
 {
@@ -175,6 +176,21 @@ XwAddCheck(XwPanel *p, const char *s, Bool *flag, int id, int x, int y)
   it->id = id;
   if (flag)
     it->state = *flag;
+  return it;
+}
+
+/* A radio button stands for one value of a setting.  The buttons of a group
+   are told apart only by sharing a value pointer, so nothing has to hold the
+   group together: each draws itself filled in when the setting happens to be
+   its own value, and clicking one simply stores that value. */
+
+XwItem *
+XwAddRadio(XwPanel *p, const char *s, int *value, int val, int x, int y)
+{
+  XwItem *it = XwAdd(p, XW_RADIO, s, x, y, XwCheckW(s), xwLineH);
+
+  it->num = value;
+  it->val = val;
   return it;
 }
 
@@ -391,6 +407,33 @@ XwDrawItem(XwPanel *p, int i)
 		     it->w + 3, it->h + 1);
     break;
 
+  case XW_RADIO:
+    /* Round, so it cannot be mistaken for a checkbox: one of these is always
+       on, where a checkbox stands on its own. */
+    box = xwLineH - 4;
+    boxY = it->y + 2;
+    XSetForeground(dpy, p->gc, xwField);
+    XFillArc(dpy, p->buf, p->gc, it->x, boxY, box, box, 0, 360 * 64);
+    XSetForeground(dpy, p->gc, xwDark);
+    XDrawArc(dpy, p->buf, p->gc, it->x, boxY, box, box, 45 * 64, 180 * 64);
+    XSetForeground(dpy, p->gc, xwLight);
+    XDrawArc(dpy, p->buf, p->gc, it->x, boxY, box, box, 225 * 64, 180 * 64);
+
+    XSetForeground(dpy, p->gc, XwLive(it) ? xwFg : xwDark);
+    if (*it->num == it->val) {
+      n = box / 2 - 1;
+      XFillArc(dpy, p->buf, p->gc, it->x + (box - n + 1) / 2,
+	       boxY + (box - n + 1) / 2, n, n, 0, 360 * 64);
+    }
+
+    XDrawString(dpy, p->buf, p->gc, it->x + box + 6, ty,
+		it->label, strlen(it->label));
+
+    if (i == p->focus)
+      XDrawRectangle(dpy, p->buf, p->gc, it->x - 2, it->y - 1,
+		     it->w + 3, it->h + 1);
+    break;
+
   case XW_BUTTON:
     XSetForeground(dpy, p->gc, xwBg);
     XFillRectangle(dpy, p->buf, p->gc, it->x, it->y, it->w, it->h);
@@ -473,7 +516,8 @@ XwFocusable(XwPanel *p, int i)
   int k = p->items[i].kind;
 
   return XwLive(&p->items[i]) &&
-	 (k == XW_TEXT || k == XW_CHECK || k == XW_BUTTON || k == XW_SLIDER);
+	 (k == XW_TEXT || k == XW_CHECK || k == XW_RADIO ||
+	  k == XW_BUTTON || k == XW_SLIDER);
 }
 
 static void
@@ -524,6 +568,12 @@ XwPanelAction(XwPanel *p, int i)
 
   if (it->id)
     return False;
+
+  if (it->kind == XW_RADIO) {
+    *it->num = it->val;
+    XwRedraw(p);
+    return True;
+  }
 
   if (it->kind != XW_CHECK)
     return False;
@@ -662,7 +712,8 @@ XwKey(XwPanel *p, XKeyEvent *ev)
     break;			/* in a text field an arrow moves the caret */
 
   case XK_space:
-    if (it && (it->kind == XW_CHECK || it->kind == XW_BUTTON)) {
+    if (it && (it->kind == XW_CHECK || it->kind == XW_RADIO ||
+	       it->kind == XW_BUTTON)) {
       if (XwPanelAction(p, p->focus))
 	return;
       p->result = it->id;

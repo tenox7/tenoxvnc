@@ -879,7 +879,21 @@ SetFormatAndEncodings()
       encs[se->nEncodings++] = Swap32IfLE(rfbEncodingContinuousUpdates);
   }
   else {
-    if (SameMachine(rfbsock)) {
+    /* The list is in the order we would like the server to use, so asking for
+       a particular encoding is just a matter of putting it at the front.  The
+       rest still follow it, since a server that cannot do our first choice
+       has to be left something it can do. */
+    static const CARD32 fallbackEncs[] = {
+      rfbEncodingTight, rfbEncodingZRLE, rfbEncodingHextile,
+      rfbEncodingZlib, rfbEncodingCoRRE, rfbEncodingRRE
+    };
+    int i;
+
+    if (appData.preferredEncoding >= 0) {
+      fprintf(stderr,"Preferring %s encoding\n",
+	      EncodingName(appData.preferredEncoding));
+      encs[se->nEncodings++] = Swap32IfLE(appData.preferredEncoding);
+    } else if (SameMachine(rfbsock)) {
       if (!tunnelSpecified) {
 	fprintf(stderr,"Same machine: preferring raw encoding\n");
 	encs[se->nEncodings++] = Swap32IfLE(rfbEncodingRaw);
@@ -889,12 +903,10 @@ SetFormatAndEncodings()
     }
 
     encs[se->nEncodings++] = Swap32IfLE(rfbEncodingCopyRect);
-    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingTight);
-    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingZRLE);
-    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingHextile);
-    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingZlib);
-    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingCoRRE);
-    encs[se->nEncodings++] = Swap32IfLE(rfbEncodingRRE);
+
+    for (i = 0; i < (int)XtNumber(fallbackEncs); i++)
+      if ((int)fallbackEncs[i] != appData.preferredEncoding)
+	encs[se->nEncodings++] = Swap32IfLE(fallbackEncs[i]);
 
     if (appData.compressLevel >= 0 && appData.compressLevel <= 9) {
       encs[se->nEncodings++] = Swap32IfLE(appData.compressLevel +
@@ -1360,6 +1372,29 @@ HandleDesktopName(void)
 
 
 /*
+ * EncodingName - the name the -encodings option, the connection dialog and
+ * the diagnostics all use for an encoding.  NULL for one we cannot decode.
+ */
+
+const char *
+EncodingName(CARD32 enc)
+{
+  switch (enc) {
+  case rfbEncodingRaw:      return "raw";
+  case rfbEncodingCopyRect: return "copyrect";
+  case rfbEncodingRRE:      return "rre";
+  case rfbEncodingCoRRE:    return "corre";
+  case rfbEncodingHextile:  return "hextile";
+  case rfbEncodingZlib:     return "zlib";
+  case rfbEncodingTight:    return "tight";
+  case rfbEncodingZRLE:     return "zrle";
+  }
+
+  return NULL;
+}
+
+
+/*
  * ReportRectEncoding - print, once per encoding per session, which
  * encodings the server actually sends (may differ from what we requested).
  */
@@ -1377,17 +1412,9 @@ ReportRectEncoding(CARD32 enc)
     return;
   reportedEncs[nReportedEncs++] = enc;
 
-  switch (enc) {
-  case rfbEncodingRaw:      name = "raw";      break;
-  case rfbEncodingCopyRect: name = "copyrect"; break;
-  case rfbEncodingRRE:      name = "rre";      break;
-  case rfbEncodingCoRRE:    name = "corre";    break;
-  case rfbEncodingHextile:  name = "hextile";  break;
-  case rfbEncodingZlib:     name = "zlib";     break;
-  case rfbEncodingTight:    name = "tight";    break;
-  case rfbEncodingZRLE:     name = "zrle";     break;
-  default:                  return;
-  }
+  name = EncodingName(enc);
+  if (!name)
+    return;
 
   fprintf(stderr, "Server using %s encoding\n", name);
 

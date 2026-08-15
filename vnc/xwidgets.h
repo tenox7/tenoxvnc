@@ -21,8 +21,9 @@
  * xwidgets.h - the small set of controls the viewer draws for itself.
  *
  * Enough of a toolkit for the connection dialog and the F8 menu: labels,
- * text fields, checkboxes, buttons and separators, drawn with Xlib on a bare
- * Xt core widget, so the viewer needs nothing beyond Xt itself.
+ * text fields, checkboxes, radio buttons, push buttons, sliders and
+ * separators, drawn with Xlib on a bare Xt core widget, so the viewer needs
+ * nothing beyond Xt itself.
  *
  * A panel owns its items, so the F8 menu can stay around between uses while
  * a modal dialog comes and goes.
@@ -31,12 +32,13 @@
 #ifndef XWIDGETS_H
 #define XWIDGETS_H
 
-#define XW_MAXITEMS 40
+#define XW_MAXITEMS 48
 
 enum {				/* item kinds */
   XW_LABEL,
   XW_TEXT,
   XW_CHECK,
+  XW_RADIO,
   XW_BUTTON,
   XW_SLIDER,
   XW_SEP
@@ -60,11 +62,15 @@ typedef struct {
 				   only means something when its checkbox is
 				   ticked greys itself out when it is not */
 
-  int *num;			/* XW_SLIDER: the value being set */
-  const int *vals;		/* the notches, in order */
+  int *num;			/* XW_SLIDER, XW_RADIO: the value being set */
+  const int *vals;		/* XW_SLIDER: the notches, in order */
   int nvals;
   Bool autoFirst;		/* vals[0] is "let the viewer decide" */
   int valW;			/* room kept at the right for the value */
+
+  int val;			/* XW_RADIO: what this button stands for; the
+				   whole group shares one num, so the one it
+				   holds is the one drawn filled in */
 
   int id;			/* XW_BUTTON and XW_CHECK: result code */
 } XwItem;
@@ -110,6 +116,8 @@ extern XwItem *XwAddLabel(XwPanel *p, const char *s, int x, int y);
 extern XwItem *XwAddText(XwPanel *p, char *buf, int maxlen, int x, int y,
 			 int cols, Bool secret, Bool numeric);
 extern XwItem *XwAddCheck(XwPanel *p, const char *s, Bool *flag, int id,
+			  int x, int y);
+extern XwItem *XwAddRadio(XwPanel *p, const char *s, int *value, int val,
 			  int x, int y);
 extern XwItem *XwAddButton(XwPanel *p, const char *s, int id, int x, int y);
 extern XwItem *XwAddSlider(XwPanel *p, int *value, const int *vals, int nvals,

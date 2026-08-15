@@ -121,8 +121,11 @@ static XtResource appDataResourceList[] = {
   {"encodings", "Encodings", XtRString, sizeof(String),
    XtOffsetOf(AppData, encodingsString), XtRImmediate, (XtPointer) 0},
 
-  {"useBGR233", "UseBGR233", XtRBool, sizeof(Bool),
-   XtOffsetOf(AppData, useBGR233), XtRImmediate, (XtPointer) False},
+  {"preferredEncoding", "PreferredEncoding", XtRString, sizeof(String),
+   XtOffsetOf(AppData, preferredEncodingString), XtRImmediate, (XtPointer) 0},
+
+  {"colourLevel", "ColourLevel", XtRString, sizeof(String),
+   XtOffsetOf(AppData, colourLevelString), XtRImmediate, (XtPointer) 0},
 
   {"nColours", "NColours", XtRInt, sizeof(int),
    XtOffsetOf(AppData, nColours), XtRImmediate, (XtPointer) 256},
@@ -211,7 +214,10 @@ XrmOptionDescRec cmdLineOptions[] = {
   {"-noraiseonbeep", "*raiseOnBeep",        XrmoptionNoArg,  "False"},
   {"-passwd",        "*passwordFile",       XrmoptionSepArg, 0},
   {"-encodings",     "*encodings",          XrmoptionSepArg, 0},
-  {"-bgr233",        "*useBGR233",          XrmoptionNoArg,  "True"},
+  {"-preferredencoding", "*preferredEncoding", XrmoptionSepArg, 0},
+  {"-colourlevel",   "*colourLevel",        XrmoptionSepArg, 0},
+  {"-colorlevel",    "*colourLevel",        XrmoptionSepArg, 0},
+  {"-bgr233",        "*colourLevel",        XrmoptionNoArg,  "medium"},
   {"-owncmap",       "*forceOwnCmap",       XrmoptionNoArg,  "True"},
   {"-truecolor",     "*forceTrueColour",    XrmoptionNoArg,  "True"},
   {"-truecolour",    "*forceTrueColour",    XrmoptionNoArg,  "True"},
@@ -279,6 +285,53 @@ removeArgs(int *argc, char** argv, int idx, int nargs)
 }
 
 /*
+ * The preferred encoding and the colour level are given by name, so that
+ * -preferredencoding zrle and -colourlevel low read the same way the
+ * connection dialog does.  Both end up as the numbers the rest of the viewer
+ * works in; an unknown name is a warning rather than a failure, since it only
+ * means we go on choosing for ourselves.
+ */
+
+static const char *colourLevelNames[] = { "full", "medium", "low", "verylow" };
+
+static int
+ParsePreferredEncoding(const char *s)
+{
+  static const CARD32 encs[] = {
+    rfbEncodingTight, rfbEncodingZRLE, rfbEncodingHextile,
+    rfbEncodingZlib, rfbEncodingCoRRE, rfbEncodingRRE, rfbEncodingRaw
+  };
+  int i;
+
+  if (!s || strcasecmp(s, "auto") == 0)
+    return -1;
+
+  for (i = 0; i < (int)XtNumber(encs); i++)
+    if (strcasecmp(s, EncodingName(encs[i])) == 0)
+      return (int)encs[i];
+
+  fprintf(stderr, "%s: unknown preferred encoding \"%s\"\n", programName, s);
+  return -1;
+}
+
+static int
+ParseColourLevel(const char *s)
+{
+  int i;
+
+  if (!s)
+    return COLOUR_FULL;
+
+  for (i = 0; i < (int)XtNumber(colourLevelNames); i++)
+    if (strcasecmp(s, colourLevelNames[i]) == 0)
+      return i;
+
+  fprintf(stderr, "%s: unknown colour level \"%s\"\n", programName, s);
+  return COLOUR_FULL;
+}
+
+
+/*
  * usage() prints out the usage message.
  */
 
@@ -302,6 +355,8 @@ usage(void)
 	  "        -noraiseonbeep\n"
 	  "        -passwd <PASSWD-FILENAME> (standard VNC authentication)\n"
 	  "        -encodings <ENCODING-LIST> (e.g. \"tight copyrect\")\n"
+	  "        -preferredencoding auto|tight|zrle|hextile|zlib|corre|rre|raw\n"
+	  "        -colourlevel full|medium|low|verylow (medium = -bgr233)\n"
 	  "        -bgr233\n"
 	  "        -owncmap\n"
 	  "        -truecolour\n"
@@ -343,6 +398,10 @@ GetArgsAndResources(int argc, char **argv)
 
   XtGetApplicationResources(toplevel, &appData, appDataResourceList,
 			    XtNumber(appDataResourceList), 0, 0);
+
+  appData.preferredEncoding =
+    ParsePreferredEncoding(appData.preferredEncodingString);
+  appData.colourLevel = ParseColourLevel(appData.colourLevelString);
 
   /* Add our actions to the actions table so they can be used in widget
      resource specs */

@@ -66,8 +66,8 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  return False;
 
 #if (BPP == 8)
-      if (appData.useBGR233)
-	gcv.foreground = BGR233ToPixel[bg];
+      if (useColourMap)
+	gcv.foreground = colourToPixel[bg];
       else
 #endif
 	gcv.foreground = bg;
@@ -101,8 +101,8 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  sh = rfbHextileExtractH(*ptr);
 	  ptr++;
 #if (BPP == 8)
-	  if (appData.useBGR233)
-	    gcv.foreground = BGR233ToPixel[fg];
+	  if (useColourMap)
+	    gcv.foreground = colourToPixel[fg];
 	  else
 #endif
 	    gcv.foreground = fg;
@@ -116,8 +116,8 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  return False;
 
 #if (BPP == 8)
-	if (appData.useBGR233)
-	  gcv.foreground = BGR233ToPixel[fg];
+	if (useColourMap)
+	  gcv.foreground = colourToPixel[fg];
 	else
 #endif
 	  gcv.foreground = fg;

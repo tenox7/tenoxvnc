@@ -136,8 +136,8 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 #endif
 
 #if (BPP == 8)
-    gcv.foreground = (appData.useBGR233) ?
-      BGR233ToPixel[fill_colour] : fill_colour;
+    gcv.foreground = (useColourMap) ?
+      colourToPixel[fill_colour] : fill_colour;
 #else
     gcv.foreground = fill_colour;
 #endif

@@ -86,6 +86,18 @@ extern int endianTest;
 
 /* argsresources.c */
 
+/* How much colour to ask the server for when we are not simply using the
+   X server's own format.  Anything but full is an 8-bit-per-pixel true
+   colour format translated through colourToPixel[]; fewer colours cost
+   fewer colormap cells on an 8-bit display and compress a good deal
+   better on a slow link. */
+enum {
+  COLOUR_FULL,			/* whatever the X visual gives us */
+  COLOUR_MEDIUM,		/* 256 colours - BGR233 */
+  COLOUR_LOW,			/* 64 colours - BGR222 */
+  COLOUR_VERYLOW		/* 8 colours - BGR111 */
+};
+
 typedef struct {
   Bool shareDesktop;
   Bool viewOnly;
@@ -94,8 +106,11 @@ typedef struct {
   Bool raiseOnBeep;
 
   String encodingsString;
+  String preferredEncodingString;
+  int preferredEncoding;	/* rfbEncoding*, or -1 to let the viewer pick */
 
-  Bool useBGR233;
+  String colourLevelString;
+  int colourLevel;
   int nColours;
   Bool useSharedColours;
   Bool forceOwnCmap;
@@ -153,13 +168,18 @@ extern void SetServerName(char *vncServerName);
 
 /* colour.c */
 
-extern unsigned long BGR233ToPixel[];
+/* Set when the server sends us 8bpp pixels that have to be looked up rather
+   than used as they stand.  colourToPixel[] is indexed by such a pixel and
+   only its first 1 << myFormat.depth entries are ever used. */
+extern Bool useColourMap;
+extern unsigned long colourToPixel[];
 
 extern Colormap cmap;
 extern Visual *vis;
 extern unsigned int visdepth, visbpp;
 
 extern void SetVisualAndCmap();
+extern const char *ColourModeName(void);
 
 /* cursor.c */
 
@@ -285,6 +305,7 @@ extern Bool cuActive;
 extern Bool ConnectToRFBServer(const char *hostname, int port);
 extern Bool InitialiseRFBConnection();
 extern Bool SetFormatAndEncodings();
+extern const char *EncodingName(CARD32 enc);
 extern Bool SendIncrementalFramebufferUpdateRequest();
 extern Bool SendFramebufferUpdateRequest(int x, int y, int w, int h,
 					 Bool incremental);
