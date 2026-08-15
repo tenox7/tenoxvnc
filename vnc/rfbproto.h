@@ -83,12 +83,12 @@ typedef struct _rfbPixelFormat {
 				   corresponding to first (leftmost) pixel. Of
 				   course this is meaningless for 8 bits/pix */
 
-    CARD8 trueColour;		/* If false then we need a "colour map" to
+    CARD8 trueColor;		/* If false then we need a "color map" to
 				   convert pixels to RGB.  If true, xxxMax and
 				   xxxShift specify bits used for red, green
 				   and blue */
 
-    /* the following fields are only meaningful if trueColour is true */
+    /* the following fields are only meaningful if trueColor is true */
 
     CARD16 redMax;		/* maximum red value (= 2^n - 1 where n is the
 				   number of bits used for red). Note this
@@ -382,7 +382,7 @@ typedef struct _rfbInteractionCapsMsg {
 /* server -> client */
 
 #define rfbFramebufferUpdate 0
-#define rfbSetColourMapEntries 1
+#define rfbSetColorMapEntries 1
 #define rfbBell 2
 #define rfbServerCutText 3
 
@@ -405,7 +405,7 @@ typedef struct _rfbInteractionCapsMsg {
 /* client -> server */
 
 #define rfbSetPixelFormat 0
-#define rfbFixColourMapEntries 1	/* not currently supported */
+#define rfbFixColorMapEntries 1	/* not currently supported */
 #define rfbSetEncodings 2
 #define rfbFramebufferUpdateRequest 3
 #define rfbKeyEvent 4
@@ -656,21 +656,21 @@ typedef struct _rfbCoRRERectangle {
  * follows:
  *
  * BackgroundSpecified - if set, a pixel value follows which specifies
- *    the background colour for this tile.  The first non-raw tile in a
+ *    the background color for this tile.  The first non-raw tile in a
  *    rectangle must have this bit set.  If this bit isn't set then the
  *    background is the same as the last tile.
  *
  * ForegroundSpecified - if set, a pixel value follows which specifies
- *    the foreground colour to be used for all subrectangles in this tile.
- *    If this bit is set then the SubrectsColoured bit must be zero.
+ *    the foreground color to be used for all subrectangles in this tile.
+ *    If this bit is set then the SubrectsColored bit must be zero.
  *
  * AnySubrects - if set, a single byte follows giving the number of
  *    subrectangles following.  If not set, there are no subrectangles (i.e.
- *    the whole tile is just solid background colour).
+ *    the whole tile is just solid background color).
  *
- * SubrectsColoured - if set then each subrectangle is preceded by a pixel
- *    value giving the colour of that subrectangle.  If not set, all
- *    subrectangles are the same colour, the foreground colour;  if the
+ * SubrectsColored - if set then each subrectangle is preceded by a pixel
+ *    value giving the color of that subrectangle.  If not set, all
+ *    subrectangles are the same color, the foreground color;  if the
  *    ForegroundSpecified bit wasn't set then the foreground is the same as
  *    the last tile.
  *
@@ -684,7 +684,7 @@ typedef struct _rfbCoRRERectangle {
 #define rfbHextileBackgroundSpecified	(1 << 1)
 #define rfbHextileForegroundSpecified	(1 << 2)
 #define rfbHextileAnySubrects		(1 << 3)
-#define rfbHextileSubrectsColoured	(1 << 4)
+#define rfbHextileSubrectsColored	(1 << 4)
 
 #define rfbHextilePackXY(x,y) (((x) << 4) | (y))
 #define rfbHextilePackWH(w,h) ((((w)-1) << 4) | ((h)-1))
@@ -902,26 +902,26 @@ typedef struct _rfbXCursorColors {
 
 
 /*-----------------------------------------------------------------------------
- * SetColourMapEntries - these messages are only sent if the pixel
- * format uses a "colour map" (i.e. trueColour false) and the client has not
- * fixed the entire colour map using FixColourMapEntries.  In addition they
+ * SetColorMapEntries - these messages are only sent if the pixel
+ * format uses a "color map" (i.e. trueColor false) and the client has not
+ * fixed the entire color map using FixColorMapEntries.  In addition they
  * will only start being sent after the client has sent its first
  * FramebufferUpdateRequest.  So if the client always tells the server to use
- * trueColour then it never needs to process this type of message.
+ * trueColor then it never needs to process this type of message.
  */
 
-typedef struct _rfbSetColourMapEntriesMsg {
-    CARD8 type;			/* always rfbSetColourMapEntries */
+typedef struct _rfbSetColorMapEntriesMsg {
+    CARD8 type;			/* always rfbSetColorMapEntries */
     CARD8 pad;
-    CARD16 firstColour;
-    CARD16 nColours;
+    CARD16 firstColor;
+    CARD16 nColors;
 
-    /* Followed by nColours * 3 * CARD16
+    /* Followed by nColors * 3 * CARD16
        r1, g1, b1, r2, g2, b2, r3, g3, b3, ..., rn, bn, gn */
 
-} rfbSetColourMapEntriesMsg;
+} rfbSetColorMapEntriesMsg;
 
-#define sz_rfbSetColourMapEntriesMsg 6
+#define sz_rfbSetColorMapEntriesMsg 6
 
 
 
@@ -1043,7 +1043,7 @@ typedef struct _rfbFenceMsg {
 typedef union _rfbServerToClientMsg {
     CARD8 type;
     rfbFramebufferUpdateMsg fu;
-    rfbSetColourMapEntriesMsg scme;
+    rfbSetColorMapEntriesMsg scme;
     rfbBellMsg b;
     rfbServerCutTextMsg sct;
     rfbFileListDataMsg fld;
@@ -1079,24 +1079,24 @@ typedef struct _rfbSetPixelFormatMsg {
 
 
 /*-----------------------------------------------------------------------------
- * FixColourMapEntries - when the pixel format uses a "colour map", fix
- * read-only colour map entries.
+ * FixColorMapEntries - when the pixel format uses a "color map", fix
+ * read-only color map entries.
  *
  *    ***************** NOT CURRENTLY SUPPORTED *****************
  */
 
-typedef struct _rfbFixColourMapEntriesMsg {
-    CARD8 type;			/* always rfbFixColourMapEntries */
+typedef struct _rfbFixColorMapEntriesMsg {
+    CARD8 type;			/* always rfbFixColorMapEntries */
     CARD8 pad;
-    CARD16 firstColour;
-    CARD16 nColours;
+    CARD16 firstColor;
+    CARD16 nColors;
 
-    /* Followed by nColours * 3 * CARD16
+    /* Followed by nColors * 3 * CARD16
        r1, g1, b1, r2, g2, b2, r3, g3, b3, ..., rn, bn, gn */
 
-} rfbFixColourMapEntriesMsg;
+} rfbFixColorMapEntriesMsg;
 
-#define sz_rfbFixColourMapEntriesMsg 6
+#define sz_rfbFixColorMapEntriesMsg 6
 
 
 /*-----------------------------------------------------------------------------
@@ -1345,7 +1345,7 @@ typedef struct _rfbSetDesktopSizeMsg {
 typedef union _rfbClientToServerMsg {
     CARD8 type;
     rfbSetPixelFormatMsg spf;
-    rfbFixColourMapEntriesMsg fcme;
+    rfbFixColorMapEntriesMsg fcme;
     rfbSetEncodingsMsg se;
     rfbFramebufferUpdateRequestMsg fur;
     rfbKeyEventMsg ke;

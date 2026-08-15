@@ -728,7 +728,7 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
     Msleep(appData.rawDelay);
   }
 
-  if (!useColourMap) {
+  if (!useColorMap) {
     int h;
     int widthInBytes = width * myFormat.bitsPerPixel / 8;
     int scrWidthInBytes = image->bytes_per_line;
@@ -788,7 +788,7 @@ CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width, int height)
       scrt = scr1;
       for (p = 0; p < width; p++) {
 	*scrt = ((*scrt & ~(1 << xcur))
-		 | (colourToPixel[*(buf++)] << xcur));
+		 | (colorToPixel[*(buf++)] << xcur));
 
 	if (xcur-- == 0) {
 	  xcur = 7;
@@ -802,7 +802,7 @@ CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width, int height)
   case 8:
     for (q = 0; q < height; q++) {
       for (p = 0; p < width; p++) {
-	*(scr8++) = colourToPixel[*(buf++)];
+	*(scr8++) = colorToPixel[*(buf++)];
       }
       scr8 += image->bytes_per_line - width;
     }
@@ -811,7 +811,7 @@ CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width, int height)
   case 16:
     for (q = 0; q < height; q++) {
       for (p = 0; p < width; p++) {
-	*(scr16++) = colourToPixel[*(buf++)];
+	*(scr16++) = colorToPixel[*(buf++)];
       }
       scr16 += image->bytes_per_line / 2 - width;
     }
@@ -820,7 +820,7 @@ CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width, int height)
   case 32:
     for (q = 0; q < height; q++) {
       for (p = 0; p < width; p++) {
-	*(scr32++) = colourToPixel[*(buf++)];
+	*(scr32++) = colorToPixel[*(buf++)];
       }
       scr32 += image->bytes_per_line / 4 - width;
     }

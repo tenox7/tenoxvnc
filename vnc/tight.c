@@ -86,7 +86,7 @@ static Bool DecompressJpegRectBPP(int x, int y, int w, int h);
 static Bool
 HandleTightBPP (int rx, int ry, int rw, int rh)
 {
-  CARDBPP fill_colour;
+  CARDBPP fill_color;
   XGCValues gcv;
   CARD8 comp_ctl;
   CARD8 filter_id;
@@ -125,21 +125,21 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 	myFormat.greenMax == 0xFF && myFormat.blueMax == 0xFF) {
       if (!ReadFromRFBServer(buffer, 3))
 	return False;
-      fill_colour = RGB24_TO_PIXEL32(buffer[0], buffer[1], buffer[2]);
+      fill_color = RGB24_TO_PIXEL32(buffer[0], buffer[1], buffer[2]);
     } else {
-      if (!ReadFromRFBServer((char*)&fill_colour, sizeof(fill_colour)))
+      if (!ReadFromRFBServer((char*)&fill_color, sizeof(fill_color)))
 	return False;
     }
 #else
-    if (!ReadFromRFBServer((char*)&fill_colour, sizeof(fill_colour)))
+    if (!ReadFromRFBServer((char*)&fill_color, sizeof(fill_color)))
 	return False;
 #endif
 
 #if (BPP == 8)
-    gcv.foreground = (useColourMap) ?
-      colourToPixel[fill_colour] : fill_colour;
+    gcv.foreground = (useColorMap) ?
+      colorToPixel[fill_color] : fill_color;
 #else
-    gcv.foreground = fill_colour;
+    gcv.foreground = fill_color;
 #endif
 
     XChangeGC(dpy, gc, GCForeground, &gcv);

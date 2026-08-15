@@ -78,15 +78,15 @@ enum {
   NCHARTS
 };
 
-/* colours */
+/* colors */
 
 enum {
   C_BG, C_PANEL, C_GRID, C_FG, C_DIM,
   C_GREEN, C_CYAN, C_ORANGE, C_VIOLET, C_YELLOW, C_RED, C_BLUE, C_PINK,
-  NCOLOURS
+  NCOLORS
 };
 
-static const char *colourSpecs[NCOLOURS] = {
+static const char *colorSpecs[NCOLORS] = {
   "#0d1117", "#161c24", "#2c3742", "#dbe4ee", "#8b98a6",
   "#4cd38a", "#4fc3f7", "#ffb74d", "#b39ddb", "#ffe082",
   "#ef5350", "#7986cb", "#f06292"
@@ -95,7 +95,7 @@ static const char *colourSpecs[NCOLOURS] = {
 typedef struct {
   const char *title;
   int nseries;
-  int colour[2];
+  int color[2];
   const char *legend[2];
 } ChartDef;
 
@@ -177,7 +177,7 @@ static Window statsWin = 0;
 static Pixmap statsBuf = 0, stippleBm = 0;
 static GC sgc = 0;
 static XFontStruct *fnSmall = NULL, *fnBold = NULL;
-static unsigned long colours[NCOLOURS];
+static unsigned long colors[NCOLORS];
 static XtIntervalId statsTimer = 0;
 static Bool statsUp = False, statsPaused = False;
 static int bufW = 0, bufH = 0;
@@ -674,49 +674,49 @@ Sample(void)
  */
 
 static void
-SetFg(int colour)
+SetFg(int color)
 {
-  if (colours[colour] == curFg)
+  if (colors[color] == curFg)
     return;
-  curFg = colours[colour];
+  curFg = colors[color];
   XSetForeground(dpy, sgc, curFg);
 }
 
 static void
-Fill(int x, int y, int w, int h, int colour)
+Fill(int x, int y, int w, int h, int color)
 {
   if (w <= 0 || h <= 0)
     return;
-  SetFg(colour);
+  SetFg(color);
   XFillRectangle(dpy, statsBuf, sgc, x, y, w, h);
 }
 
 static void
-Frame(int x, int y, int w, int h, int colour)
+Frame(int x, int y, int w, int h, int color)
 {
   if (w <= 1 || h <= 1)
     return;
-  SetFg(colour);
+  SetFg(color);
   XDrawRectangle(dpy, statsBuf, sgc, x, y, w - 1, h - 1);
 }
 
 static int
-Text(int x, int y, const char *s, int colour, XFontStruct *fn)
+Text(int x, int y, const char *s, int color, XFontStruct *fn)
 {
   int len = strlen(s);
 
-  SetFg(colour);
+  SetFg(color);
   XSetFont(dpy, sgc, fn->fid);
   XDrawString(dpy, statsBuf, sgc, x, y + fn->ascent, s, len);
   return XTextWidth(fn, s, len);
 }
 
 static void
-TextRight(int x, int y, const char *s, int colour, XFontStruct *fn)
+TextRight(int x, int y, const char *s, int color, XFontStruct *fn)
 {
   int len = strlen(s);
 
-  SetFg(colour);
+  SetFg(color);
   XSetFont(dpy, sgc, fn->fid);
   XDrawString(dpy, statsBuf, sgc, x - XTextWidth(fn, s, len), y + fn->ascent,
 	      s, len);
@@ -728,7 +728,7 @@ TextRight(int x, int y, const char *s, int colour, XFontStruct *fn)
  */
 
 static void
-TextClip(int x, int y, const char *s, int maxW, int colour, XFontStruct *fn)
+TextClip(int x, int y, const char *s, int maxW, int color, XFontStruct *fn)
 {
   char buf[128];
   int n = strlen(s);
@@ -736,7 +736,7 @@ TextClip(int x, int y, const char *s, int maxW, int colour, XFontStruct *fn)
   if (maxW < charW)
     return;
   if (XTextWidth(fn, s, n) <= maxW) {
-    Text(x, y, s, colour, fn);
+    Text(x, y, s, color, fn);
     return;
   }
 
@@ -747,7 +747,7 @@ TextClip(int x, int y, const char *s, int maxW, int colour, XFontStruct *fn)
   memcpy(buf, s, n);
   buf[n] = 0;
   buf[n - 1] = '~';
-  Text(x, y, buf, colour, fn);
+  Text(x, y, buf, color, fn);
 }
 
 
@@ -855,7 +855,7 @@ DrawChart(int ch, int x, int y, int w, int h)
   Frame(x, y, w, h, C_GRID);
 
   Text(x + 6, y + 3, def->title, C_FG, fnBold);
-  TextRight(x + w - 6, y + 3, chartValue[ch], def->colour[0], fnSmall);
+  TextRight(x + w - 6, y + 3, chartValue[ch], def->color[0], fnSmall);
 
   plotX = x + 6;
   plotY = y + 4 + lineH + 4;
@@ -911,7 +911,7 @@ DrawChart(int ch, int x, int y, int w, int h)
       continue;
 
     /* stippled area under the curve, then the line itself */
-    SetFg(def->colour[s]);
+    SetFg(def->color[s]);
     if (s == 0 && stippleBm) {
       pts[np].x = pts[np - 1].x;
       pts[np].y = plotY + plotH;
@@ -926,7 +926,7 @@ DrawChart(int ch, int x, int y, int w, int h)
 
   legX = plotX + 2;
   for (s = 0; s < def->nseries; s++) {
-    Fill(legX, plotY + plotH + 5, 7, 7, def->colour[s]);
+    Fill(legX, plotY + plotH + 5, 7, 7, def->color[s]);
     legX += 10;
     legX += Text(legX, plotY + plotH + 2, def->legend[s], C_DIM, fnSmall) + 10;
   }
@@ -940,7 +940,7 @@ DrawChart(int ch, int x, int y, int w, int h)
 
 static int
 DrawBars(const char *title, const char **labels, const unsigned long *vals,
-	 int n, int x, int y, int w, int h, int colour)
+	 int n, int x, int y, int w, int h, int color)
 {
   int i, labW, valW, barX, barW, bw, rowH, top;
   unsigned long max = 0;
@@ -976,7 +976,7 @@ DrawBars(const char *title, const char **labels, const unsigned long *vals,
     if (max > 0 && vals[i] > 0) {
       bw = (int)((double)barW * vals[i] / max);
       if (bw < 1) bw = 1;
-      Fill(barX, cy + (rowH - th) / 2, bw, th, colour);
+      Fill(barX, cy + (rowH - th) / 2, bw, th, color);
     }
     if (vals[i] > 0)
       sprintf(buf, "%s  %.0f%%", FmtCount((double)vals[i], cnt),
@@ -1257,15 +1257,15 @@ BuildConnectionItems(void)
 
   sprintf(v, "%d bpp, depth %d, %s%s", si.format.bitsPerPixel,
 	  si.format.depth, si.format.bigEndian ? "big endian" : "little endian",
-	  si.format.trueColour ? ", true colour" : ", colour map");
+	  si.format.trueColor ? ", true color" : ", color map");
   AddItem("Server format", v);
 
   sprintf(v, "%d bpp, depth %d, %s", myFormat.bitsPerPixel, myFormat.depth,
-	  useColourMap ? ColourModeName() :
-	  (myFormat.trueColour ? "true colour" : "colour map"));
+	  useColorMap ? ColorModeName() :
+	  (myFormat.trueColor ? "true color" : "color map"));
   AddItem("Client format", v);
 
-  if (myFormat.trueColour) {
+  if (myFormat.trueColor) {
     sprintf(v, "r %d<<%d g %d<<%d b %d<<%d", myFormat.redMax,
 	    myFormat.redShift, myFormat.greenMax, myFormat.greenShift,
 	    myFormat.blueMax, myFormat.blueShift);
@@ -1391,8 +1391,8 @@ BuildMessageItems(void)
 
   sprintf(v, "%lu", vncStats.msgUpdate);
   AddItem("S>C FramebufUpd", v);
-  sprintf(v, "%lu", vncStats.msgColourMap);
-  AddItem("S>C SetColourMap", v);
+  sprintf(v, "%lu", vncStats.msgColorMap);
+  AddItem("S>C SetColorMap", v);
   sprintf(v, "%lu", vncStats.msgBell);
   AddItem("S>C Bell", v);
   sprintf(v, "%lu", vncStats.msgCutText);
@@ -1511,7 +1511,7 @@ DrawTabs(int W)
     Fill(x, tabY, tw, tabH, i == page ? C_GRID : C_PANEL);
     Frame(x, tabY, tw, tabH, C_GRID);
     Text(x + 12, tabY + 4, pageNames[i], i == page ? C_FG : C_DIM, fnBold);
-    /* an accent bar marks the current page even where colours are scarce */
+    /* an accent bar marks the current page even where colors are scarce */
     if (i == page)
       Fill(x + 1, tabY + tabH - 3, tw - 2, 2, C_CYAN);
     x += tw + 4;
@@ -1714,12 +1714,12 @@ StatsEventProc(Widget w, XtPointer p, XEvent *ev, Boolean *cont)
 
 
 /*
- * Colour and font setup.  Everything degrades to black and white if the
+ * Color and font setup.  Everything degrades to black and white if the
  * display or its colormap cannot give us what we ask for.
  */
 
 static unsigned long
-AllocColour(const char *spec, unsigned long fallback)
+AllocColor(const char *spec, unsigned long fallback)
 {
   static XColor cmapEntry[256];
   static int cmapSize = -1;
@@ -1735,7 +1735,7 @@ AllocColour(const char *spec, unsigned long fallback)
     return c.pixel;
 
   /* The colormap is full, which is the normal case on an 8 bit display
-     once the desktop has taken its share.  Settle for the closest colour
+     once the desktop has taken its share.  Settle for the closest color
      already in it rather than dropping to plain black and white. */
 
   if (DefaultDepth(dpy, screen) > 8)
@@ -1798,8 +1798,8 @@ CreateStatsWindow(void)
   black = BlackPixel(dpy, screen);
   white = WhitePixel(dpy, screen);
 
-  for (i = 0; i < NCOLOURS; i++)
-    colours[i] = AllocColour(colourSpecs[i],
+  for (i = 0; i < NCOLORS; i++)
+    colors[i] = AllocColor(colorSpecs[i],
 			     (i <= C_GRID) ? black : white);
 
   fnSmall = LoadFont(smallNames);
@@ -1819,7 +1819,7 @@ CreateStatsWindow(void)
     charW = 6;
 
   /* Use the default visual and colormap: the desktop window may be on a
-     private colormap (-owncmap) or a BGR233 palette in which our colours
+     private colormap (-owncmap) or a BGR233 palette in which our colors
      would mean nothing. */
 
   statsShell = XtVaCreatePopupShell("statsShell", topLevelShellWidgetClass,
@@ -1837,7 +1837,7 @@ CreateStatsWindow(void)
 					statsShell,
 					XtNwidth, WIN_W,
 					XtNheight, WIN_H,
-					XtNbackground, colours[C_BG],
+					XtNbackground, colors[C_BG],
 					XtNborderWidth, 0,
 					NULL);
 

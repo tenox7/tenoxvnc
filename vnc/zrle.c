@@ -72,10 +72,10 @@ ResetZRLEState(void)
     if (cpixelBytes == bytesPP) { \
       memcpy((dst), p, bytesPP); \
     } else if (cpixelLS != myFormat.bigEndian) { \
-      /* colour bytes first, pad byte last */ \
+      /* color bytes first, pad byte last */ \
       (dst)[0] = p[0]; (dst)[1] = p[1]; (dst)[2] = p[2]; (dst)[3] = 0; \
     } else { \
-      /* pad byte first, colour bytes last */ \
+      /* pad byte first, color bytes last */ \
       (dst)[0] = 0; (dst)[1] = p[0]; (dst)[2] = p[1]; (dst)[3] = p[2]; \
     } \
     p += cpixelBytes; \
@@ -93,20 +93,20 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 
   bytesPP = myFormat.bitsPerPixel / 8;
 
-  /* Decide the CPIXEL size: 3 bytes when 32bpp, depth <= 24 and all colour
+  /* Decide the CPIXEL size: 3 bytes when 32bpp, depth <= 24 and all color
      bits live in three consecutive bytes at one end of the pixel. */
 
   cpixelBytes = bytesPP;
   if (myFormat.bitsPerPixel == 32 && myFormat.depth <= 24) {
-    CARD32 colourBits = ((CARD32)myFormat.redMax << myFormat.redShift) |
+    CARD32 colorBits = ((CARD32)myFormat.redMax << myFormat.redShift) |
 			((CARD32)myFormat.greenMax << myFormat.greenShift) |
 			((CARD32)myFormat.blueMax << myFormat.blueShift);
-    if ((colourBits & 0xFF000000) == 0) {
+    if ((colorBits & 0xFF000000) == 0) {
       cpixelBytes = 3;
-      cpixelLS = True;		/* colour in least significant 3 bytes */
-    } else if ((colourBits & 0x000000FF) == 0) {
+      cpixelLS = True;		/* color in least significant 3 bytes */
+    } else if ((colorBits & 0x000000FF) == 0) {
       cpixelBytes = 3;
-      cpixelLS = False;		/* colour in most significant 3 bytes */
+      cpixelLS = False;		/* color in most significant 3 bytes */
     }
   }
 
@@ -229,7 +229,7 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 	  ZRLE_CPIXEL(&zrleTile[i * bytesPP]);
 
       } else if (subenc == 1) {
-	/* solid colour tile */
+	/* solid color tile */
 	ZRLE_CPIXEL(&zrleTile[0]);
 	for (i = 1; i < npixels; i++)
 	  memcpy(&zrleTile[i * bytesPP], &zrleTile[0], bytesPP);

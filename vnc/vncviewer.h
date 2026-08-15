@@ -86,17 +86,19 @@ extern int endianTest;
 
 /* argsresources.c */
 
-/* How much colour to ask the server for when we are not simply using the
+/* How much color to ask the server for when we are not simply using the
    X server's own format.  Anything but full is an 8-bit-per-pixel true
-   colour format translated through colourToPixel[]; fewer colours cost
+   color format translated through colorToPixel[]; fewer colors cost
    fewer colormap cells on an 8-bit display and compress a good deal
    better on a slow link. */
 enum {
-  COLOUR_FULL,			/* whatever the X visual gives us */
-  COLOUR_MEDIUM,		/* 256 colours - BGR233 */
-  COLOUR_LOW,			/* 64 colours - BGR222 */
-  COLOUR_VERYLOW		/* 8 colours - BGR111 */
+  COLOR_FULL,			/* whatever the X visual gives us */
+  COLOR_MEDIUM,			/* 256 colors - BGR233 */
+  COLOR_LOW,			/* 64 colors - BGR222 */
+  COLOR_VERYLOW			/* 8 colors - BGR111 */
 };
+
+#define COLOR_DEFAULT	COLOR_MEDIUM	/* when -colorlevel isn't given */
 
 typedef struct {
   Bool shareDesktop;
@@ -109,12 +111,12 @@ typedef struct {
   String preferredEncodingString;
   int preferredEncoding;	/* rfbEncoding*, or -1 to let the viewer pick */
 
-  String colourLevelString;
-  int colourLevel;
-  int nColours;
-  Bool useSharedColours;
+  String colorLevelString;
+  int colorLevel;
+  int nColors;
+  Bool useSharedColors;
   Bool forceOwnCmap;
-  Bool forceTrueColour;
+  Bool forceTrueColor;
   int requestedDepth;
 
   Bool useShm;
@@ -166,20 +168,20 @@ extern void usage(void);
 extern void GetArgsAndResources(int argc, char **argv);
 extern void SetServerName(char *vncServerName);
 
-/* colour.c */
+/* color.c */
 
 /* Set when the server sends us 8bpp pixels that have to be looked up rather
-   than used as they stand.  colourToPixel[] is indexed by such a pixel and
+   than used as they stand.  colorToPixel[] is indexed by such a pixel and
    only its first 1 << myFormat.depth entries are ever used. */
-extern Bool useColourMap;
-extern unsigned long colourToPixel[];
+extern Bool useColorMap;
+extern unsigned long colorToPixel[];
 
 extern Colormap cmap;
 extern Visual *vis;
 extern unsigned int visdepth, visbpp;
 
 extern void SetVisualAndCmap();
-extern const char *ColourModeName(void);
+extern const char *ColorModeName(void);
 
 /* cursor.c */
 
@@ -379,7 +381,7 @@ typedef struct {
   /* protocol layer */
   double streamIn;		/* bytes consumed from the server stream */
   unsigned long msgsIn, msgsOut;
-  unsigned long msgUpdate, msgColourMap, msgBell, msgCutText, msgFence,
+  unsigned long msgUpdate, msgColorMap, msgBell, msgCutText, msgFence,
 		msgEndCU;
   unsigned long sentKey, sentPointer, sentUpdateReq, sentFullReq, sentCutText,
 		sentFence, sentSetDesktopSize, sentEnableCU;

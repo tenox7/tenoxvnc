@@ -1445,26 +1445,26 @@ HandleRFBServerMessage()
 
   switch (msg.type) {
 
-  case rfbSetColourMapEntries:
+  case rfbSetColorMapEntries:
   {
     int i;
     CARD16 rgb[3];
     XColor xc;
 
-    STATS(vncStats.msgColourMap++);
-    StatsLog(0, "SetColourMapEntries", sz_rfbSetColourMapEntriesMsg, 0.0);
+    STATS(vncStats.msgColorMap++);
+    StatsLog(0, "SetColorMapEntries", sz_rfbSetColorMapEntriesMsg, 0.0);
 
     if (!ReadFromRFBServer(((char *)&msg) + 1,
-			   sz_rfbSetColourMapEntriesMsg - 1))
+			   sz_rfbSetColorMapEntriesMsg - 1))
       return False;
 
-    msg.scme.firstColour = Swap16IfLE(msg.scme.firstColour);
-    msg.scme.nColours = Swap16IfLE(msg.scme.nColours);
+    msg.scme.firstColor = Swap16IfLE(msg.scme.firstColor);
+    msg.scme.nColors = Swap16IfLE(msg.scme.nColors);
 
-    for (i = 0; i < msg.scme.nColours; i++) {
+    for (i = 0; i < msg.scme.nColors; i++) {
       if (!ReadFromRFBServer((char *)rgb, 6))
 	return False;
-      xc.pixel = msg.scme.firstColour + i;
+      xc.pixel = msg.scme.firstColor + i;
       xc.red = Swap16IfLE(rgb[0]);
       xc.green = Swap16IfLE(rgb[1]);
       xc.blue = Swap16IfLE(rgb[2]);
@@ -2013,13 +2013,13 @@ PrintPixelFormat(format)
       fprintf(stderr,"  %s significant byte first in each pixel.\n",
 	      (format->bigEndian ? "Most" : "Least"));
     }
-    if (format->trueColour) {
-      fprintf(stderr,"  True colour: max red %d green %d blue %d",
+    if (format->trueColor) {
+      fprintf(stderr,"  True color: max red %d green %d blue %d",
 	      format->redMax, format->greenMax, format->blueMax);
       fprintf(stderr,", shift red %d green %d blue %d\n",
 	      format->redShift, format->greenShift, format->blueShift);
     } else {
-      fprintf(stderr,"  Colour map (not true colour).\n");
+      fprintf(stderr,"  Color map (not true color).\n");
     }
   }
 }

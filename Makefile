@@ -8,7 +8,7 @@ TARGET = tenoxvnc
 # Diag under F8 Menu. Off unless VNCSTATS=true make <target>
 STATS = $(VNCSTATS:true=-DVNCSTATS)
 
-VIEWER_SRCS = vnc/argsresources.c vnc/caps.c vnc/colour.c vnc/cursor.c \
+VIEWER_SRCS = vnc/argsresources.c vnc/caps.c vnc/color.c vnc/cursor.c \
 	vnc/desktop.c vnc/dialogs.c vnc/fullscreen.c vnc/listen.c vnc/misc.c \
 	vnc/popup.c vnc/rfbproto.c vnc/selection.c vnc/shm.c vnc/sockets.c \
 	vnc/stats.c vnc/tunnel.c vnc/vncviewer.c vnc/vncauth.c vnc/d3des.c \

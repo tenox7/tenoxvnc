@@ -182,7 +182,7 @@ ToplevelInitBeforeRealization()
 
 /*
  * UpdateWindowTitle sets the window and icon titles from the current
- * desktopName plus brief session info: encoding, colour mode, protocol
+ * desktopName plus brief session info: encoding, color mode, protocol
  * version and view-only state.  Called again whenever any of it changes
  * (encodings negotiated, DesktopName updates).  Falls back to "TenoxVNC"
  * if the server did not supply a desktop name.
@@ -196,7 +196,7 @@ UpdateWindowTitle(void)
 
   sprintf(info, "%s%s%s 3.%d%s%s",
 	  titleEncName[0] ? titleEncName : "", titleEncName[0] ? " " : "",
-	  ColourModeName(), protocolMinorVersion, tightVncProtocol ? "t" : "",
+	  ColorModeName(), protocolMinorVersion, tightVncProtocol ? "t" : "",
 	  appData.viewOnly ? " ro" : "");
 
   name = (desktopName && desktopName[0]) ? desktopName : "TenoxVNC";

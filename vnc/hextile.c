@@ -66,8 +66,8 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  return False;
 
 #if (BPP == 8)
-      if (useColourMap)
-	gcv.foreground = colourToPixel[bg];
+      if (useColorMap)
+	gcv.foreground = colorToPixel[bg];
       else
 #endif
 	gcv.foreground = bg;
@@ -88,7 +88,7 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 
       ptr = (CARD8 *)buffer;
 
-      if (subencoding & rfbHextileSubrectsColoured) {
+      if (subencoding & rfbHextileSubrectsColored) {
 	if (!ReadFromRFBServer(buffer, nSubrects * (2 + (BPP / 8))))
 	  return False;
 
@@ -101,8 +101,8 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  sh = rfbHextileExtractH(*ptr);
 	  ptr++;
 #if (BPP == 8)
-	  if (useColourMap)
-	    gcv.foreground = colourToPixel[fg];
+	  if (useColorMap)
+	    gcv.foreground = colorToPixel[fg];
 	  else
 #endif
 	    gcv.foreground = fg;
@@ -116,8 +116,8 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  return False;
 
 #if (BPP == 8)
-	if (useColourMap)
-	  gcv.foreground = colourToPixel[fg];
+	if (useColorMap)
+	  gcv.foreground = colorToPixel[fg];
 	else
 #endif
 	  gcv.foreground = fg;

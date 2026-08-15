@@ -43,7 +43,7 @@ static char dlgPass[PASS_LEN + 1];
 Bool connectDialogUsed = False;
 
 /* The notches on the three sliders.  Depth has to be one the X server can
-   really give us, so the list is the true colour depths rather than a range.
+   really give us, so the list is the true color depths rather than a range.
    The first entry of the other two is the unset one: depth 0 means any depth
    will do and compression level -1 asks the server for nothing, leaving the
    viewer to pick.  JPEG quality has no unset - out of range means 5 - so it
@@ -55,7 +55,7 @@ static const int levelVals[] = { -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 /* The two radio groups.  Auto leaves the encoding to the viewer, which is
    what the viewer has always done; the rest of the encodings the viewer can
    decode are still reachable with -encodings, they are just not worth a
-   button here.  The colour levels are all the server can be asked for. */
+   button here.  The color levels are all the server can be asked for. */
 static const char *const encNames[] = {
   "Auto", "Tight", "ZRLE", "Hextile", "Raw"
 };
@@ -63,11 +63,11 @@ static const int encVals[] = {
   -1, rfbEncodingTight, rfbEncodingZRLE, rfbEncodingHextile, rfbEncodingRaw
 };
 
-static const char *const colourNames[] = {
+static const char *const colorNames[] = {
   "Full", "Medium", "Low", "Very low"
 };
-static const int colourVals[] = {
-  COLOUR_FULL, COLOUR_MEDIUM, COLOUR_LOW, COLOUR_VERYLOW
+static const int colorVals[] = {
+  COLOR_FULL, COLOR_MEDIUM, COLOR_LOW, COLOR_VERYLOW
 };
 
 
@@ -149,8 +149,8 @@ DlgBuild(Bool withOptions)
     /* The second column has to clear the widest checkbox that shares a row
        with it, not the widest overall - the long ones sit alone. */
     col2 = col1 + xwCharW * 2;
-    col2 += XwCheckW("Shared") > XwCheckW("True colour")
-	    ? XwCheckW("Shared") : XwCheckW("True colour");
+    col2 += XwCheckW("Shared") > XwCheckW("True color")
+	    ? XwCheckW("Shared") : XwCheckW("True color");
 
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Session:", pad, y);
@@ -189,17 +189,17 @@ DlgBuild(Bool withOptions)
     y += rowH;
 
     y += xwLineH / 2;
-    XwAddLabel(&dlg, "Colour:", pad, y);
-    y = DlgRadios(colourNames, colourVals, XtNumber(colourNames),
-		  &appData.colourLevel, 2, col2 - col1, col1, y, rowH);
-    XwAddCheck(&dlg, "True colour", &appData.forceTrueColour, 0, col1, y);
+    XwAddLabel(&dlg, "Color:", pad, y);
+    y = DlgRadios(colorNames, colorVals, XtNumber(colorNames),
+		  &appData.colorLevel, 2, col2 - col1, col1, y, rowH);
+    XwAddCheck(&dlg, "True color", &appData.forceTrueColor, 0, col1, y);
     XwAddCheck(&dlg, "Own colormap", &appData.forceOwnCmap, 0, col2, y);
     y += rowH;
-    XwAddLabel(&dlg, "Depth", pad, y + 1)->enableIf = &appData.forceTrueColour;
+    XwAddLabel(&dlg, "Depth", pad, y + 1)->enableIf = &appData.forceTrueColor;
     slider[2] = dlg.nItems;
     XwAddSlider(&dlg, &appData.requestedDepth, depthVals,
 		XtNumber(depthVals), True, col1, y, 1);
-    dlg.items[slider[2]].enableIf = &appData.forceTrueColour;
+    dlg.items[slider[2]].enableIf = &appData.forceTrueColor;
     y += rowH;
   }
 

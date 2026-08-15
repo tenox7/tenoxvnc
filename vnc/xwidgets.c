@@ -23,7 +23,7 @@
  * Everything is drawn into an offscreen pixmap and copied over in one go, so
  * nothing flickers while a field is being typed into.  Panels deliberately
  * use the default visual and colormap: by the time the F8 menu is used the
- * desktop may be on a private BGR233 map in which these colours would mean
+ * desktop may be on a private BGR233 map in which these colors would mean
  * nothing.
  */
 
@@ -57,7 +57,7 @@ XwLoadFont(void)
 }
 
 static unsigned long
-XwColour(const char *spec, unsigned long fallback)
+XwColor(const char *spec, unsigned long fallback)
 {
   XColor screen, exact;
   int scr = DefaultScreen(dpy);
@@ -87,12 +87,12 @@ XwInit(void)
   if (xwCharW < 1)
     xwCharW = 6;
 
-  xwBg = XwColour("gray85", WhitePixel(dpy, scr));
-  xwFg = XwColour("black", BlackPixel(dpy, scr));
-  xwField = XwColour("white", WhitePixel(dpy, scr));
-  xwDark = XwColour("gray45", BlackPixel(dpy, scr));
-  xwLight = XwColour("gray100", WhitePixel(dpy, scr));
-  xwWarn = XwColour("red3", BlackPixel(dpy, scr));
+  xwBg = XwColor("gray85", WhitePixel(dpy, scr));
+  xwFg = XwColor("black", BlackPixel(dpy, scr));
+  xwField = XwColor("white", WhitePixel(dpy, scr));
+  xwDark = XwColor("gray45", BlackPixel(dpy, scr));
+  xwLight = XwColor("gray100", WhitePixel(dpy, scr));
+  xwWarn = XwColor("red3", BlackPixel(dpy, scr));
 
   return True;
 }

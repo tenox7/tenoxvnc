@@ -124,20 +124,20 @@ static XtResource appDataResourceList[] = {
   {"preferredEncoding", "PreferredEncoding", XtRString, sizeof(String),
    XtOffsetOf(AppData, preferredEncodingString), XtRImmediate, (XtPointer) 0},
 
-  {"colourLevel", "ColourLevel", XtRString, sizeof(String),
-   XtOffsetOf(AppData, colourLevelString), XtRImmediate, (XtPointer) 0},
+  {"colorLevel", "ColorLevel", XtRString, sizeof(String),
+   XtOffsetOf(AppData, colorLevelString), XtRImmediate, (XtPointer) 0},
 
-  {"nColours", "NColours", XtRInt, sizeof(int),
-   XtOffsetOf(AppData, nColours), XtRImmediate, (XtPointer) 256},
+  {"nColors", "NColors", XtRInt, sizeof(int),
+   XtOffsetOf(AppData, nColors), XtRImmediate, (XtPointer) 256},
 
-  {"useSharedColours", "UseSharedColours", XtRBool, sizeof(Bool),
-   XtOffsetOf(AppData, useSharedColours), XtRImmediate, (XtPointer) True},
+  {"useSharedColors", "UseSharedColors", XtRBool, sizeof(Bool),
+   XtOffsetOf(AppData, useSharedColors), XtRImmediate, (XtPointer) True},
 
   {"forceOwnCmap", "ForceOwnCmap", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, forceOwnCmap), XtRImmediate, (XtPointer) False},
 
-  {"forceTrueColour", "ForceTrueColour", XtRBool, sizeof(Bool),
-   XtOffsetOf(AppData, forceTrueColour), XtRImmediate, (XtPointer) False},
+  {"forceTrueColor", "ForceTrueColor", XtRBool, sizeof(Bool),
+   XtOffsetOf(AppData, forceTrueColor), XtRImmediate, (XtPointer) False},
 
   {"requestedDepth", "RequestedDepth", XtRInt, sizeof(int),
    XtOffsetOf(AppData, requestedDepth), XtRImmediate, (XtPointer) 0},
@@ -215,12 +215,10 @@ XrmOptionDescRec cmdLineOptions[] = {
   {"-passwd",        "*passwordFile",       XrmoptionSepArg, 0},
   {"-encodings",     "*encodings",          XrmoptionSepArg, 0},
   {"-preferredencoding", "*preferredEncoding", XrmoptionSepArg, 0},
-  {"-colourlevel",   "*colourLevel",        XrmoptionSepArg, 0},
-  {"-colorlevel",    "*colourLevel",        XrmoptionSepArg, 0},
-  {"-bgr233",        "*colourLevel",        XrmoptionNoArg,  "medium"},
+  {"-colorlevel",    "*colorLevel",         XrmoptionSepArg, 0},
+  {"-bgr233",        "*colorLevel",         XrmoptionNoArg,  "medium"},
   {"-owncmap",       "*forceOwnCmap",       XrmoptionNoArg,  "True"},
-  {"-truecolor",     "*forceTrueColour",    XrmoptionNoArg,  "True"},
-  {"-truecolour",    "*forceTrueColour",    XrmoptionNoArg,  "True"},
+  {"-truecolor",     "*forceTrueColor",     XrmoptionNoArg,  "True"},
   {"-depth",         "*requestedDepth",     XrmoptionSepArg, 0},
   {"-compresslevel", "*compressLevel",      XrmoptionSepArg, 0},
   {"-quality",       "*qualityLevel",       XrmoptionSepArg, 0},
@@ -285,14 +283,14 @@ removeArgs(int *argc, char** argv, int idx, int nargs)
 }
 
 /*
- * The preferred encoding and the colour level are given by name, so that
- * -preferredencoding zrle and -colourlevel low read the same way the
+ * The preferred encoding and the color level are given by name, so that
+ * -preferredencoding zrle and -colorlevel low read the same way the
  * connection dialog does.  Both end up as the numbers the rest of the viewer
  * works in; an unknown name is a warning rather than a failure, since it only
  * means we go on choosing for ourselves.
  */
 
-static const char *colourLevelNames[] = { "full", "medium", "low", "verylow" };
+static const char *colorLevelNames[] = { "full", "medium", "low", "verylow" };
 
 static int
 ParsePreferredEncoding(const char *s)
@@ -315,19 +313,19 @@ ParsePreferredEncoding(const char *s)
 }
 
 static int
-ParseColourLevel(const char *s)
+ParseColorLevel(const char *s)
 {
   int i;
 
   if (!s)
-    return COLOUR_FULL;
+    return COLOR_DEFAULT;
 
-  for (i = 0; i < (int)XtNumber(colourLevelNames); i++)
-    if (strcasecmp(s, colourLevelNames[i]) == 0)
+  for (i = 0; i < (int)XtNumber(colorLevelNames); i++)
+    if (strcasecmp(s, colorLevelNames[i]) == 0)
       return i;
 
-  fprintf(stderr, "%s: unknown colour level \"%s\"\n", programName, s);
-  return COLOUR_FULL;
+  fprintf(stderr, "%s: unknown color level \"%s\"\n", programName, s);
+  return COLOR_DEFAULT;
 }
 
 
@@ -356,10 +354,11 @@ usage(void)
 	  "        -passwd <PASSWD-FILENAME> (standard VNC authentication)\n"
 	  "        -encodings <ENCODING-LIST> (e.g. \"tight copyrect\")\n"
 	  "        -preferredencoding auto|tight|zrle|hextile|zlib|corre|rre|raw\n"
-	  "        -colourlevel full|medium|low|verylow (medium = -bgr233)\n"
+	  "        -colorlevel full|medium|low|verylow (medium = -bgr233,\n"
+	  "                     set by default)\n"
 	  "        -bgr233\n"
 	  "        -owncmap\n"
-	  "        -truecolour\n"
+	  "        -truecolor\n"
 	  "        -depth <DEPTH>\n"
 	  "        -compresslevel <COMPRESS-VALUE> (0..9: 0-fast, 9-best)\n"
 	  "        -quality <JPEG-QUALITY-VALUE> (0..9: 0-low, 9-high)\n"
@@ -401,7 +400,7 @@ GetArgsAndResources(int argc, char **argv)
 
   appData.preferredEncoding =
     ParsePreferredEncoding(appData.preferredEncodingString);
-  appData.colourLevel = ParseColourLevel(appData.colourLevelString);
+  appData.colorLevel = ParseColorLevel(appData.colorLevelString);
 
   /* Add our actions to the actions table so they can be used in widget
      resource specs */

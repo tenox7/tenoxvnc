@@ -49,7 +49,7 @@ static void ScrollDrawBars(void);
 static void ScrollToPointer(int x, int y);
 static void ScrollFormEvent(Widget w, XtPointer ptr, XEvent *ev,
 			    Boolean *cont);
-static unsigned long ScrollColour(const char *name, unsigned long fallback);
+static unsigned long ScrollColor(const char *name, unsigned long fallback);
 static void ScrollStrips(int *availW, int *availH);
 
 
@@ -65,9 +65,9 @@ ScrollInit(void)
 
   sbGC = XCreateGC(dpy, XtWindow(form), 0, NULL);
 
-  troughPixel = ScrollColour("grey40", BlackPixelOfScreen(scr));
-  thumbPixel = ScrollColour("grey75", WhitePixelOfScreen(scr));
-  edgePixel = ScrollColour("black", BlackPixelOfScreen(scr));
+  troughPixel = ScrollColor("grey40", BlackPixelOfScreen(scr));
+  thumbPixel = ScrollColor("grey75", WhitePixelOfScreen(scr));
+  edgePixel = ScrollColor("black", BlackPixelOfScreen(scr));
 
   XtAddEventHandler(form, ExposureMask | StructureNotifyMask |
 		    ButtonPressMask | ButtonReleaseMask | Button1MotionMask,
@@ -151,7 +151,7 @@ ScrollTo(int x, int y)
 
 
 static unsigned long
-ScrollColour(const char *name, unsigned long fallback)
+ScrollColor(const char *name, unsigned long fallback)
 {
   XColor screen, exact;
 
