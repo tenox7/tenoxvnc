@@ -48,15 +48,21 @@ all:
 	echo "=> make $$t"; \
 	$(MAKE) $$t
 
-$(TARGET): version $(OBJECTS)
+# Stamping the version needs git, so only the targets whose hosts have it ask
+# for it, by passing VERSTAMP=version.  Everywhere else this expands to nothing
+# and no make has to resolve a target that never produces a file - SCO's SVR
+# make will not have it.  Those hosts do not need it anyway: they build this
+# tree over NFS, already stamped.
+VERSTAMP =
+
+$(TARGET): $(VERSTAMP) $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
 # Stamp vnc/version.h with the most recent git tag, e.g. "1.1".  Silently does
-# nothing where git or the repo is missing - the vintage build hosts see this
-# tree over NFS and compile the file as the tagging host left it.  sed rewrites
-# the string in place so no recipe here has to contain a '#', which not every
-# make passes through to the shell.  Only written when it actually changes, so
-# a plain rebuild neither dirties the tree nor recompiles the world.
+# nothing where git or the repo is missing.  sed rewrites the string in place
+# so no recipe here has to contain a '#', which not every make passes through
+# to the shell.  Only written when it actually changes, so a plain rebuild
+# neither dirties the tree nor recompiles the world.
 version:
 	@v=`git describe --tags --abbrev=0 2>/dev/null`; test -n "$$v" || exit 0; \
 	sed 's/TENOXVNC_VERSION ".*"/TENOXVNC_VERSION "'"$$v"'"/' \
@@ -74,11 +80,11 @@ version:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 linux:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 macos:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/opt/X11/include $(STATS)" \
+	$(MAKE) VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM -I/opt/X11/include $(STATS)" \
 	  LDFLAGS="-L/opt/X11/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 solaris:
@@ -144,7 +150,7 @@ IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
 IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
 
 irix5:
-	$(MAKE) version $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include $(STATS)"
+	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include $(STATS)"
 	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
 	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
 	  -L$(IRIX5_GCCLIB) -L$(IRIX5_GCCLIB)/../../.. -L/usr/lib \
