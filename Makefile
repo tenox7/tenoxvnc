@@ -42,7 +42,7 @@ all:
 	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *.10.*) t=hpux10;; *) t=hpux11;; esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix5;; *) t=irix;; esac;; \
 	  UnixWare|UNIX_SV) t=unixware;; \
-	  SCO_SV)  case "$$v" in 6.*) t=sco6;; *) t=sco5;; esac;; \
+	  SCO_SV)  case "$$v" in 6.*) t=osr6;; *) t=osr5;; esac;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
 	esac; \
 	echo "=> make $$t"; \
@@ -108,11 +108,11 @@ unixware:
 
 # OpenServer 5 and 6 both report uname -s SCO_SV, only uname -v distinguishes
 # them (5.0.7 vs 6.0.0). On 6 the X11 tree moved to /usr/X11R6.
-sco5:
+osr5:
 	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
-sco6:
+osr6:
 	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O -I/usr/X11R6/include $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-L/usr/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
@@ -146,4 +146,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware sco5 sco6 osf1 irix irix5 netbsd
+.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osr5 osr6 osf1 irix irix5 netbsd
