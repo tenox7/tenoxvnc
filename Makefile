@@ -48,21 +48,13 @@ all:
 	echo "=> make $$t"; \
 	$(MAKE) $$t
 
-# Stamping the version needs git, so only the targets whose hosts have it ask
-# for it, by passing VERSTAMP=version.  Everywhere else this expands to nothing
-# and no make has to resolve a target that never produces a file - SCO's SVR
-# make will not have it.  Those hosts do not need it anyway: they build this
-# tree over NFS, already stamped.
+# Only hosts with git stamp the version; SVR make chokes on a phony prereq
 VERSTAMP =
 
 $(TARGET): $(VERSTAMP) $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
-# Stamp vnc/version.h with the most recent git tag, e.g. "1.1".  Silently does
-# nothing where git or the repo is missing.  sed rewrites the string in place
-# so no recipe here has to contain a '#', which not every make passes through
-# to the shell.  Only written when it actually changes, so a plain rebuild
-# neither dirties the tree nor recompiles the world.
+# vnc/version.h gets the latest git tag; no-op without git
 version:
 	@v=`git describe --tags --abbrev=0 2>/dev/null`; test -n "$$v" || exit 0; \
 	sed 's/TENOXVNC_VERSION ".*"/TENOXVNC_VERSION "'"$$v"'"/' \
