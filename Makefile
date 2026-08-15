@@ -102,9 +102,11 @@ aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
+# libXt.so pulls in the Smc*/Ice* session-management calls but does not record
+# a dependency on them, so -lSM -lICE have to be named explicitly.
 unixware:
 	$(MAKE) CC=/usr/ccs/bin/cc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
+	  LDFLAGS="-lXt -lSM -lICE -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
 # OpenServer 5 and 6 both report uname -s SCO_SV, only uname -v distinguishes
 # them (5.0.7 vs 6.0.0). On 6 the X11 tree moved to /usr/X11R6.
