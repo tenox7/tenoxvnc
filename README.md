@@ -6,6 +6,10 @@ Based on TightVNC, with TigerVNC feature backports (dynamic desktop resizing, co
 
 ![TenoxVNC running on HP-UX](tenoxvnc.png)
 
+Mostly used to run a modern web browser on vintage hardware, via
+[VNCBRAVE](https://github.com/tenox7/vncbrave) (Brave) and
+[VNCFOX](https://github.com/tenox7/vncfox) (Firefox) Docker containers.
+
 ## Downloads
 
 Statically linked binaries for many OSes available under [Releases](https://github.com/tenox7/tenoxvnc/releases).
