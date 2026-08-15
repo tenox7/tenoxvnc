@@ -19,9 +19,6 @@ command line flag or X resource.
 
 ![Connection dialog](connect.png)
 
-Each option is marked *server* (negotiated with or sent to the VNC server) or
-*client* (local to the viewer and its X display).
-
 - **Server** *(server)* — VNC server as `host`, `host:display` (display + 5900) or `host::port`.
 - **Password** *(server)* — VNC password, kept until the server asks for it; ignored by servers with no authentication, overridden by `-passwd` or `VNC_PASSWORD`.
 - **Shared** *(server)* — do not disconnect other clients already viewing that desktop (`-noshared` to take it exclusively).
