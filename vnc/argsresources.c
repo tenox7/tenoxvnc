@@ -428,6 +428,7 @@ GetArgsAndResources(int argc, char **argv)
     usage();
   } else {
     vncServerName = argv[1];
+    PrintBanner();
 
     if (!isatty(0))
       appData.passwordDialog = True;

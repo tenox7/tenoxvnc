@@ -44,6 +44,19 @@ ProcessPendingXEvents(void)
     XtAppProcessEvent(appContext, XtIMAll);
 }
 
+/*
+ * PrintBanner - what and which version we are, above whatever else the run
+ * puts on the console.  Only printed when the viewer was told what to do on
+ * the command line: started bare it is driven from the connect dialog, and
+ * there is generally no console to print to.
+ */
+
+void
+PrintBanner(void)
+{
+  fprintf(stderr, "TenoxVNC %s\n", TENOXVNC_VERSION);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -59,15 +72,10 @@ main(int argc, char **argv)
       usage();
     if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "-version") == 0 ||
 	strcmp(argv[i], "--version") == 0) {
-      fprintf(stderr, "TenoxVNC %s\n", TENOXVNC_VERSION);
+      PrintBanner();
       exit(0);
     }
   }
-
-  /* Banner, so whatever else goes to the console below is preceded by what
-     produced it */
-
-  fprintf(stderr, "TenoxVNC %s\n", TENOXVNC_VERSION);
 
   /* The -listen option is used to make us a daemon process which listens for
      incoming connections from servers, rather than actively connecting to a
@@ -81,6 +89,7 @@ main(int argc, char **argv)
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-listen") == 0) {
+      PrintBanner();
       listenForIncomingConnections(&argc, argv, i);
       break;
     }

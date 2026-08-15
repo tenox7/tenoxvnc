@@ -509,3 +509,4 @@ extern Display* dpy;
 extern Widget toplevel;
 
 extern void ProcessPendingXEvents(void);
+extern void PrintBanner(void);

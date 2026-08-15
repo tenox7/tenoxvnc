@@ -270,7 +270,8 @@ char *
 DoConnectDialog(const char *message)
 {
   for (;;) {
-    if (DlgRun(True, "TenoxVNC - Connect", message) != RES_CONNECT) {
+    if (DlgRun(True, "TenoxVNC " TENOXVNC_VERSION " - Connect", message)
+	!= RES_CONNECT) {
       Cleanup();
       exit(1);
     }
