@@ -41,7 +41,8 @@ all:
 	  NetBSD)  t=netbsd;; \
 	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *.10.*) t=hpux10;; *) t=hpux11;; esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix5;; *) t=irix;; esac;; \
-	  UnixWare|UNIX_SV|SCO_SV) t=unixware;; \
+	  UnixWare|UNIX_SV) t=unixware;; \
+	  SCO_SV)  t=sco;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
 	esac; \
 	echo "=> make $$t"; \
@@ -105,6 +106,15 @@ unixware:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
+# SCO OpenServer 5 has no compiler in the base system: build with the UDK in
+# /udk, which also carries the X11R6 headers and libs it links against. Xt
+# needs SM and ICE spelled out, and sockets live in libsocket/libnsl.
+UDK = /udk/usr/ccs/bin
+
+sco:
+	$(MAKE) CC=$(UDK)/cc CFLAGS="-O $(INCS) -DMITSHM $(STATS)" \
+	  LDFLAGS="-lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
+
 osf1:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
@@ -135,4 +145,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osf1 irix irix5 netbsd
+.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware sco osf1 irix irix5 netbsd

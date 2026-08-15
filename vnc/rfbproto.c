@@ -1352,7 +1352,7 @@ HandleDesktopName(void)
   free(desktopName);
   desktopName = name;
 
-  fprintf(stderr, "Desktop name changed to \"%s\"\n", desktopName);
+  /* fprintf(stderr, "Desktop name changed to \"%s\"\n", desktopName); */
   UpdateWindowTitle();
 
   return True;
