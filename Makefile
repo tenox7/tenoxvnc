@@ -31,7 +31,7 @@ OBJECTS = $(VIEWER_SRCS:.c=.o) $(ZLIB_OBJS) $(JPEG_OBJS)
 
 # Auto detect OS
 all:
-	@s=`uname -s`; r=`uname -r`; \
+	@s=`uname -s`; r=`uname -r`; v=`uname -v`; \
 	case "$$s" in \
 	  Linux)   t=linux;; \
 	  Darwin)  t=macos;; \
@@ -42,7 +42,7 @@ all:
 	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *.10.*) t=hpux10;; *) t=hpux11;; esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix5;; *) t=irix;; esac;; \
 	  UnixWare|UNIX_SV) t=unixware;; \
-	  SCO_SV)  t=sco;; \
+	  SCO_SV)  case "$$v" in 6.*) t=sco6;; *) t=sco5;; esac;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
 	esac; \
 	echo "=> make $$t"; \
@@ -103,17 +103,18 @@ aix:
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 unixware:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=/usr/ccs/bin/cc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
-# SCO OpenServer 5 has no compiler in the base system: build with the UDK in
-# /udk, which also carries the X11R6 headers and libs it links against. Xt
-# needs SM and ICE spelled out, and sockets live in libsocket/libnsl.
-UDK = /udk/usr/ccs/bin
-
-sco:
-	$(MAKE) CC=$(UDK)/cc CFLAGS="-O $(INCS) -DMITSHM $(STATS)" \
+# OpenServer 5 and 6 both report uname -s SCO_SV, only uname -v distinguishes
+# them (5.0.7 vs 6.0.0). On 6 the X11 tree moved to /usr/X11R6.
+sco5:
+	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
+
+sco6:
+	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O -I/usr/X11R6/include $(INCS) -DMITSHM $(STATS)" \
+	  LDFLAGS="-L/usr/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
 osf1:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
@@ -145,4 +146,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware sco osf1 irix irix5 netbsd
+.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware sco5 sco6 osf1 irix irix5 netbsd
