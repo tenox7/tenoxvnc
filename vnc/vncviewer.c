@@ -50,14 +50,24 @@ main(int argc, char **argv)
   int i;
   programName = argv[0];
 
-  /* Handle -h/-help/--help before any Xt initialisation so that printing
-     usage does not require an X display. */
+  /* Handle -h/-help/--help and -v/-version before any Xt initialisation so
+     that printing them does not require an X display. */
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "-help") == 0 ||
 	strcmp(argv[i], "--help") == 0)
       usage();
+    if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "-version") == 0 ||
+	strcmp(argv[i], "--version") == 0) {
+      fprintf(stderr, "TenoxVNC %s\n", TENOXVNC_VERSION);
+      exit(0);
+    }
   }
+
+  /* Banner, so whatever else goes to the console below is preceded by what
+     produced it */
+
+  fprintf(stderr, "TenoxVNC %s\n", TENOXVNC_VERSION);
 
   /* The -listen option is used to make us a daemon process which listens for
      incoming connections from servers, rather than actively connecting to a

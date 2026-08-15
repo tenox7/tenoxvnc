@@ -211,7 +211,8 @@ ShowPopup(Widget w, XEvent *event, String *params, Cardinal *num_params)
   }
 
   MenuBuild();
-  XwBuildWindow(&menu, "popup", "TenoxVNC", menu.w, menu.h, False);
+  XwBuildWindow(&menu, "popup", "TenoxVNC " TENOXVNC_VERSION,
+		menu.w, menu.h, False);
   menu.activate = MenuActivate;
   menuBuilt = True;
 

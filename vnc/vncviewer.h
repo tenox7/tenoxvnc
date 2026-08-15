@@ -51,6 +51,7 @@ void bcopy();
 #endif
 #include "rfbproto.h"
 #include "caps.h"
+#include "version.h"
 
 extern int endianTest;
 

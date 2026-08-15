@@ -48,8 +48,22 @@ all:
 	echo "=> make $$t"; \
 	$(MAKE) $$t
 
-$(TARGET): $(OBJECTS)
+$(TARGET): version $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
+
+# Stamp vnc/version.h with the most recent git tag, e.g. "1.1".  Silently does
+# nothing where git or the repo is missing - the vintage build hosts see this
+# tree over NFS and compile the file as the tagging host left it.  sed rewrites
+# the string in place so no recipe here has to contain a '#', which not every
+# make passes through to the shell.  Only written when it actually changes, so
+# a plain rebuild neither dirties the tree nor recompiles the world.
+version:
+	@v=`git describe --tags --abbrev=0 2>/dev/null`; test -n "$$v" || exit 0; \
+	sed 's/TENOXVNC_VERSION ".*"/TENOXVNC_VERSION "'"$$v"'"/' \
+	  vnc/version.h > vnc/version.tmp; \
+	cmp -s vnc/version.tmp vnc/version.h || \
+	  { echo "=> version $$v"; cp vnc/version.tmp vnc/version.h; }; \
+	rm -f vnc/version.tmp
 
 # POSIX suffix rule, not a GNU "%.o: %.c" pattern rule: HP-UX native make
 # ignores pattern rules and its built-in .c.o has no -o $@, so objects land in
@@ -130,7 +144,7 @@ IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
 IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
 
 irix5:
-	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include $(STATS)"
+	$(MAKE) version $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include $(STATS)"
 	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
 	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
 	  -L$(IRIX5_GCCLIB) -L$(IRIX5_GCCLIB)/../../.. -L/usr/lib \
@@ -148,4 +162,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osr5 osr6 osf1 irix irix5 netbsd
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osr5 osr6 osf1 irix irix5 netbsd
