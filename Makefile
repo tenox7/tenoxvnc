@@ -40,7 +40,7 @@ all:
 	  OSF1)    t=osf1;; \
 	  NetBSD)  t=netbsd;; \
 	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *.10.*) t=hpux10;; *) t=hpux11;; esac;; \
-	  IRIX*)   case "$$r" in 5.*) t=irix5;; *) t=irix;; esac;; \
+	  IRIX*)   case "$$r" in 5.*) t=irix53;; *) t=irix65;; esac;; \
 	  UnixWare|UNIX_SV) t=unixware;; \
 	  SCO_SV)  case "$$v" in 6.*) t=osr6;; *) t=osr5;; esac;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
@@ -134,17 +134,21 @@ osf1:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
-# gcc predefines _COMPILER_VERSION to impersonate MIPSpro, so SGI's stddef.h
-# defines offsetof() with the MIPSpro-only __INTADDR__ builtin and every
-# XtOffsetOf() stops being a constant.  -isystem picks SGI's header over gcc's.
-irix:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -isystem /usr/include -U_COMPILER_VERSION $(STATS)" \
-	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
+# MIPSpro cc, -woff mutes unused-variable warnings. mips3 runs on any 6.5 box,
+# mips4 needs R5000 or newer. MIPS V exists on paper only, MIPSpro stops at 4.
+irix65:
+	$(MAKE) CC=cc CFLAGS="-n32 -mips3 -O2 $(INCS) -DMITSHM -woff 1174,1552 $(STATS)" \
+	  LDFLAGS="-n32 -mips3 -lXt -lXext -lX11 -lm" $(TARGET)
+
+irix65mips4:
+	$(MAKE) CC=cc CFLAGS="-n32 -mips4 -O2 $(INCS) -DMITSHM -woff 1174,1552 $(STATS)" \
+	  LDFLAGS="-n32 -mips4 -lXt -lXext -lX11 -lm" $(TARGET)
 
 IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
 IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
 
-irix5:
+# gcc fakes _COMPILER_VERSION, so SGI's offsetof() needs MIPSpro's __INTADDR__
+irix53:
 	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include -U_COMPILER_VERSION $(STATS)"
 	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
 	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
@@ -163,4 +167,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osr5 osr6 osf1 irix irix5 netbsd
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd
