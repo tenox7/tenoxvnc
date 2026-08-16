@@ -134,15 +134,18 @@ osf1:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
+# gcc predefines _COMPILER_VERSION to impersonate MIPSpro, so SGI's stddef.h
+# defines offsetof() with the MIPSpro-only __INTADDR__ builtin and every
+# XtOffsetOf() stops being a constant.  -isystem picks SGI's header over gcc's.
 irix:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -isystem /usr/include $(STATS)" \
+	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -isystem /usr/include -U_COMPILER_VERSION $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
 IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
 
 irix5:
-	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include $(STATS)"
+	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include -U_COMPILER_VERSION $(STATS)"
 	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
 	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
 	  -L$(IRIX5_GCCLIB) -L$(IRIX5_GCCLIB)/../../.. -L/usr/lib \
