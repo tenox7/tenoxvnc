@@ -78,7 +78,7 @@ ProcessXtEvents()
 
   for (;;) {
     while (XtAppPending(appContext))
-      XtAppProcessEvent(appContext, XtIMAll);
+      StatsProcessEvent(XtIMAll);
 
     if (VmsSocketReady(rfbsock, VMS_POLL_MSEC))
       break;
@@ -109,7 +109,7 @@ ProcessXtEvents()
   XtAppAddInput(appContext, rfbsock, (XtPointer)XtInputReadMask,
 		rfbsockReadyCallback, NULL);
   while (!rfbsockReady) {
-    XtAppProcessEvent(appContext, XtIMAll);
+    StatsProcessEvent(XtIMAll);
   }
 
   STATS(vncStats.sockWaits++);

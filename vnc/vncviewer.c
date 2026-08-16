@@ -41,7 +41,7 @@ void
 ProcessPendingXEvents(void)
 {
   while (XtAppPending(appContext))
-    XtAppProcessEvent(appContext, XtIMAll);
+    StatsProcessEvent(XtIMAll);
 }
 
 /*
@@ -188,6 +188,10 @@ main(int argc, char **argv)
   /* Tell the VNC server which pixel format and encodings we want to use */
 
   SetFormatAndEncodings();
+
+  /* -stats: the diagnostics window, without going through the F8 menu */
+
+  StatsStartup();
 
   /* Now enter the main loop, processing VNC messages.  X events will
      automatically be processed whenever the VNC connection is idle. */

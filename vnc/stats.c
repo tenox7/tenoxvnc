@@ -44,6 +44,11 @@ int vncStatsCompiledOut = 0;
 #else
 
 #include <X11/Xutil.h>
+#ifdef __VMS
+#include <time.h>		/* no getrusage in the VMS CRTL */
+#else
+#include <sys/resource.h>
+#endif
 
 VncStats vncStats;
 Bool statsProfiling = False;
@@ -64,10 +69,10 @@ Bool statsProfiling = False;
 
 /* pages */
 
-enum { PG_OVERVIEW, PG_PROFILE, PG_PROTOCOL, PG_STATS, NPAGES };
+enum { PG_OVERVIEW, PG_PROFILE, PG_X11, PG_PROTOCOL, PG_STATS, NPAGES };
 
 static const char *pageNames[NPAGES] = {
-  "OVERVIEW", "PROFILING", "PROTOCOL", "STATISTICS"
+  "OVERVIEW", "PROFILING", "X11", "PROTOCOL", "STATISTICS"
 };
 
 /* charts */
@@ -75,6 +80,7 @@ static const char *pageNames[NPAGES] = {
 enum {
   CH_FPS, CH_RECTS, CH_NET, CH_PIXELS,
   CH_RATIO, CH_LATENCY, CH_DECODE, CH_LOAD,
+  CH_CPU, CH_XEV,
   NCHARTS
 };
 
@@ -107,7 +113,9 @@ static const ChartDef chartDefs[NCHARTS] = {
   { "Compression",	1, { C_PINK,   0        }, { "ratio",     0 } },
   { "Latency",		2, { C_RED,    C_BLUE   }, { "fence", "update" } },
   { "Decode time",	2, { C_BLUE,   C_DIM    }, { "decode", "wait"  } },
-  { "Decoder load",	1, { C_GREEN,  0        }, { "%",         0 } }
+  { "Decoder load",	1, { C_GREEN,  0        }, { "%",         0 } },
+  { "Client CPU",	2, { C_RED,    C_ORANGE }, { "user", "sys"     } },
+  { "X events",		1, { C_PINK,   0        }, { "events/s",  0 } }
 };
 
 static float hist[NCHARTS][2][HIST];
@@ -144,6 +152,11 @@ static const char *ivLabels[STAT_NBUCKETS] = {
   "< 5", "< 10", "< 20", "< 33", "< 50", "< 100", "< 200", ">= 200"
 };
 
+static const char *xevNames[STAT_XEV_COUNT] = {
+  "motion", "key", "button", "crossing", "focus", "keymap",
+  "expose", "structure", "property", "selection", "clientmsg", "other"
+};
+
 /* protocol log */
 
 typedef struct {
@@ -163,12 +176,14 @@ static int logHead = 0, logCount = 0;
 typedef struct {
   double t;
   double sockIn, sockOut, pixels, rectBytes, rawEquiv, decodeTime, waitTime;
-  unsigned long updates, rects;
+  double cpuUser, cpuSys, xDispatch;
+  unsigned long updates, rects, xEvents;
 } Snapshot;
 
 static Snapshot prev;
 
-static double peakRx = 0.0, peakTx = 0.0, peakFps = 0.0;
+static double peakRx = 0.0, peakTx = 0.0, peakFps = 0.0, peakCpu = 0.0;
+static double cpuBaseUser = 0.0, cpuBaseSys = 0.0;
 
 /* window state */
 
@@ -238,6 +253,31 @@ Bucket(double v, const double *edges)
  * StatsInit - called once the RFB connection is up.
  */
 
+/*
+ * CpuUsage - process CPU seconds, split between user and system.  A viewer
+ * that is busy but not decoding is either drawing (user) or talking to the X
+ * server (system), and the split says which.
+ */
+
+static void
+CpuUsage(double *user, double *sys)
+{
+#ifdef __VMS
+  *user = (double)clock() / (double)CLOCKS_PER_SEC;
+  *sys = 0.0;
+#else
+  struct rusage ru;
+
+  if (getrusage(RUSAGE_SELF, &ru) != 0) {
+    *user = *sys = 0.0;
+    return;
+  }
+  *user = ru.ru_utime.tv_sec + ru.ru_utime.tv_usec / 1000000.0;
+  *sys = ru.ru_stime.tv_sec + ru.ru_stime.tv_usec / 1000000.0;
+#endif
+}
+
+
 void
 StatsInit(void)
 {
@@ -251,10 +291,11 @@ StatsInit(void)
 
   memset((char *)&prev, 0, sizeof(prev));
   prev.t = vncStats.startTime;
+  CpuUsage(&cpuBaseUser, &cpuBaseSys);	/* CPU is counted from here on */
   histHead = histCount = 0;
   logHead = logCount = 0;
   updPrevStart = 0.0;
-  peakRx = peakTx = peakFps = 0.0;
+  peakRx = peakTx = peakFps = peakCpu = 0.0;
 }
 
 
@@ -510,6 +551,75 @@ StatsFencePong(int len, char *data)
 
 
 /*
+ * StatsProcessEvent - XtAppProcessEvent with the X events counted and timed.
+ *
+ * Xt offers no hook into its own dispatch, so while profiling we take the
+ * event off the queue and dispatch it ourselves.  Everything else - timers,
+ * the socket input callback, and the whole non profiling case - is handed to
+ * Xt untouched, so the normal path is exactly what it was.
+ */
+
+static int
+EventGroup(int type)
+{
+  switch (type) {
+  case MotionNotify:
+    return STAT_XEV_MOTION;
+  case KeyPress: case KeyRelease:
+    return STAT_XEV_KEY;
+  case ButtonPress: case ButtonRelease:
+    return STAT_XEV_BUTTON;
+  case EnterNotify: case LeaveNotify:
+    return STAT_XEV_CROSSING;
+  case FocusIn: case FocusOut:
+    return STAT_XEV_FOCUS;
+  case KeymapNotify:
+    return STAT_XEV_KEYMAP;
+  case Expose: case GraphicsExpose: case NoExpose:
+    return STAT_XEV_EXPOSE;
+  case VisibilityNotify: case CreateNotify: case DestroyNotify:
+  case UnmapNotify: case MapNotify: case MapRequest: case ReparentNotify:
+  case ConfigureNotify: case ConfigureRequest: case GravityNotify:
+  case ResizeRequest: case CirculateNotify: case CirculateRequest:
+    return STAT_XEV_STRUCTURE;
+  case PropertyNotify:
+    return STAT_XEV_PROPERTY;
+  case SelectionClear: case SelectionRequest: case SelectionNotify:
+    return STAT_XEV_SELECTION;
+  case ClientMessage:
+    return STAT_XEV_CLIENTMSG;
+  }
+  return STAT_XEV_OTHER;
+}
+
+void
+StatsProcessEvent(XtInputMask mask)
+{
+  XEvent ev;
+  double spent;
+  int g;
+
+  if (!statsProfiling || !(mask & XtIMXEvent) ||
+      !(XtAppPending(appContext) & XtIMXEvent)) {
+    XtAppProcessEvent(appContext, mask);
+    return;
+  }
+
+  XtAppNextEvent(appContext, &ev);
+  g = EventGroup(ev.type);
+  vncStats.xEvents++;
+  vncStats.xev[g]++;
+
+  spent = StatsTime();
+  XtDispatchEvent(&ev);
+  spent = StatsTime() - spent;
+
+  vncStats.xevTime[g] += spent;
+  vncStats.xDispatch += spent;
+}
+
+
+/*
  * Number formatting.  Old systems have no snprintf, so these all write into
  * caller supplied buffers of a known size.
  */
@@ -591,10 +701,21 @@ Sample(void)
   double dt = now - prev.t;
   double fps, rects, rx, tx, mpix, ratio, load, decodeMs, waitMs;
   double dBytes, dRaw, dUpdates, dRects;
+  double cpuUser, cpuSys, userPct, sysPct, xevRate, dispPct;
   char a[32], b[32];
 
   if (dt < 0.05)
     return;
+
+  CpuUsage(&cpuUser, &cpuSys);
+  cpuUser -= cpuBaseUser;
+  cpuSys -= cpuBaseSys;
+  userPct = (cpuUser - prev.cpuUser) / dt * 100.0;
+  sysPct = (cpuSys - prev.cpuSys) / dt * 100.0;
+  if (userPct < 0.0) userPct = 0.0;
+  if (sysPct < 0.0) sysPct = 0.0;
+  xevRate = (double)(vncStats.xEvents - prev.xEvents) / dt;
+  dispPct = (vncStats.xDispatch - prev.xDispatch) / dt * 100.0;
 
   dUpdates = (double)(vncStats.updates - prev.updates);
   dRects = (double)(vncStats.rects - prev.rects);
@@ -619,6 +740,7 @@ Sample(void)
   if (fps > peakFps) peakFps = fps;
   if (rx > peakRx) peakRx = rx;
   if (tx > peakTx) peakTx = tx;
+  if (userPct + sysPct > peakCpu) peakCpu = userPct + sysPct;
 
   hist[CH_FPS][0][histHead] = (float)fps;
   hist[CH_RECTS][0][histHead] = (float)rects;
@@ -631,6 +753,9 @@ Sample(void)
   hist[CH_DECODE][0][histHead] = (float)decodeMs;
   hist[CH_DECODE][1][histHead] = (float)waitMs;
   hist[CH_LOAD][0][histHead] = (float)load;
+  hist[CH_CPU][0][histHead] = (float)userPct;
+  hist[CH_CPU][1][histHead] = (float)sysPct;
+  hist[CH_XEV][0][histHead] = (float)xevRate;
 
   sprintf(chartValue[CH_FPS], "%.1f fps  (peak %.1f)", fps, peakFps);
   sprintf(chartValue[CH_RECTS], "%.0f/s  (%.1f per update)", rects,
@@ -651,6 +776,9 @@ Sample(void)
 	  waitMs);
   sprintf(chartValue[CH_LOAD], "%.1f %%  (peak %.1f ms/update)", load,
 	  vncStats.maxDecodeMs);
+  sprintf(chartValue[CH_CPU], "%.1f %%  (user %.1f  sys %.1f)",
+	  userPct + sysPct, userPct, sysPct);
+  sprintf(chartValue[CH_XEV], "%.0f/s  (%.1f %% dispatch)", xevRate, dispPct);
 
   histHead = (histHead + 1) % HIST;
   if (histCount < HIST)
@@ -666,6 +794,10 @@ Sample(void)
   prev.waitTime = vncStats.waitTime;
   prev.updates = vncStats.updates;
   prev.rects = vncStats.rects;
+  prev.cpuUser = vncStats.cpuUser = cpuUser;
+  prev.cpuSys = vncStats.cpuSys = cpuSys;
+  prev.xDispatch = vncStats.xDispatch;
+  prev.xEvents = vncStats.xEvents;
 }
 
 
@@ -992,20 +1124,55 @@ DrawBars(const char *title, const char **labels, const unsigned long *vals,
 
 
 /*
- * DrawEncodings - per encoding table with an inline share bar.
+ * DrawEncodings - per encoding table with a share column and an inline bar.
+ * Tight is split into its JPEG and non JPEG halves: the two cost very
+ * different amounts of CPU per pixel, and the encoding name alone hides
+ * which of them the server is actually sending.
  */
 
 static const char *encNames[STAT_ENC_COUNT] = {
   "raw", "copyrect", "rre", "corre", "hextile", "zlib", "tight", "zrle"
 };
 
+/* column positions, set up by DrawEncodings before it draws any row */
+
+static int cRects, cBytes, cPix, cRatio, cShare, encBarX, encBarW;
+
+static void
+EncRow(int x, int cy, const char *name, double rects, double bytes,
+       double pixels, int color, int sub)
+{
+  int col = rects > 0.0 ? C_FG : C_DIM, bw;
+  double share = vncStats.rects ? rects / (double)vncStats.rects : 0.0;
+  double ratio = bytes > 0.0 ? pixels * (myFormat.bitsPerPixel / 8) / bytes
+			     : 0.0;
+  char buf[64];
+
+  Text(x + 6 + (sub ? charW * 2 : 0), cy, name, sub ? C_DIM : col, fnSmall);
+  TextRight(cRects, cy, FmtCount(rects, buf), col, fnSmall);
+  TextRight(cBytes, cy, FmtBytes(bytes, buf), col, fnSmall);
+  TextRight(cPix, cy, FmtCount(pixels, buf), col, fnSmall);
+  if (ratio > 0.0) {
+    sprintf(buf, "%.1f:1", ratio);
+    TextRight(cRatio, cy, buf, C_GREEN, fnSmall);
+  }
+  if (rects > 0.0) {
+    sprintf(buf, "%.1f%%", share * 100.0);
+    TextRight(cShare, cy, buf, col, fnSmall);
+  }
+  if (encBarW && share > 0.0) {
+    bw = (int)(encBarW * share);
+    if (bw < 1) bw = 1;
+    Fill(encBarX, cy + 2, bw, lineH - 4, color);
+  }
+}
+
 static int
 DrawEncodings(int x, int y, int w)
 {
-  int h = PanelHeight(STAT_ENC_COUNT + 2);
-  int i, cy, barX, barW, bw;
-  int cRects, cBytes, cPix, cRatio;
-  double share, ratio;
+  int h = PanelHeight(STAT_ENC_COUNT + 4);
+  int i, cy, row = 0;
+  double jr, jb, jp;
   char buf[64], a[32], b[32];
 
   y = Panel("ENCODINGS", x, y, w, h);
@@ -1014,58 +1181,53 @@ DrawEncodings(int x, int y, int w)
   cBytes = cRects + charW * 11;
   cPix = cBytes + charW * 11;
   cRatio = cPix + charW * 12;
-  barX = cRatio + charW * 3;
-  barW = w - (barX - x) - 8;
-  if (barW < 20) barW = 0;
+  cShare = cRatio + charW * 9;
+  encBarX = cShare + charW * 3;
+  encBarW = w - (encBarX - x) - 8;
+  if (encBarW < 20) encBarW = 0;
 
   Text(x + 6, y, "encoding", C_DIM, fnSmall);
   TextRight(cRects, y, "rects", C_DIM, fnSmall);
   TextRight(cBytes, y, "bytes", C_DIM, fnSmall);
   TextRight(cPix, y, "pixels", C_DIM, fnSmall);
   TextRight(cRatio, y, "ratio", C_DIM, fnSmall);
-  if (barW)
-    Text(barX, y, "share of rects", C_DIM, fnSmall);
+  TextRight(cShare, y, "share", C_DIM, fnSmall);
+  if (encBarW)
+    Text(encBarX, y, "share of rects", C_DIM, fnSmall);
   y += lineH;
 
   for (i = 0; i < STAT_ENC_COUNT; i++) {
-    int col = vncStats.enc[i].rects ? C_FG : C_DIM;
+    EncRow(x, y + row++ * lineH, encNames[i], (double)vncStats.enc[i].rects,
+	   vncStats.enc[i].bytes, vncStats.enc[i].pixels, C_CYAN, 0);
 
-    cy = y + i * lineH;
-    share = vncStats.rects ? (double)vncStats.enc[i].rects / vncStats.rects
-			   : 0.0;
-    ratio = vncStats.enc[i].bytes > 0.0 ?
-      vncStats.enc[i].pixels * (myFormat.bitsPerPixel / 8) /
-      vncStats.enc[i].bytes : 0.0;
+    if (i != STAT_ENC_TIGHT || !vncStats.enc[i].rects)
+      continue;
 
-    Text(x + 6, cy, encNames[i], col, fnSmall);
-    TextRight(cRects, cy, FmtCount((double)vncStats.enc[i].rects, buf), col,
-	      fnSmall);
-    TextRight(cBytes, cy, FmtBytes(vncStats.enc[i].bytes, buf), col, fnSmall);
-    TextRight(cPix, cy, FmtCount(vncStats.enc[i].pixels, buf), col, fnSmall);
-    if (ratio > 0.0) {
-      sprintf(buf, "%.1f:1", ratio);
-      TextRight(cRatio, cy, buf, C_GREEN, fnSmall);
-    }
-    if (barW && share > 0.0) {
-      bw = (int)(barW * share);
-      if (bw < 1) bw = 1;
-      Fill(barX, cy + 2, bw, lineH - 4, C_CYAN);
-    }
+    jr = (double)vncStats.tightJpeg;
+    jb = vncStats.tightJpegBytes;
+    jp = vncStats.tightJpegPixels;
+    EncRow(x, y + row++ * lineH, "jpeg", jr, jb, jp, C_ORANGE, 1);
+
+    jr = (double)vncStats.enc[i].rects - jr;
+    jb = vncStats.enc[i].bytes - jb;
+    jp = vncStats.enc[i].pixels - jp;
+    EncRow(x, y + row++ * lineH, "non-jpeg",
+	   jr > 0.0 ? jr : 0.0, jb > 0.0 ? jb : 0.0, jp > 0.0 ? jp : 0.0,
+	   C_VIOLET, 1);
   }
 
-  cy = y + STAT_ENC_COUNT * lineH;
-  ratio = vncStats.rectBytes > 0.0 ? vncStats.rawEquiv / vncStats.rectBytes
-				   : 0.0;
+  cy = y + row * lineH;
   Text(x + 6, cy, "total", C_FG, fnBold);
   TextRight(cRects, cy, FmtCount((double)vncStats.rects, buf), C_FG, fnSmall);
   TextRight(cBytes, cy, FmtBytes(vncStats.rectBytes, buf), C_FG, fnSmall);
   TextRight(cPix, cy, FmtCount(vncStats.pixels, buf), C_FG, fnSmall);
-  sprintf(buf, "%.1f:1", ratio);
+  sprintf(buf, "%.1f:1", vncStats.rectBytes > 0.0 ?
+	  vncStats.rawEquiv / vncStats.rectBytes : 0.0);
   TextRight(cRatio, cy, buf, C_GREEN, fnSmall);
-  if (barW) {
+  if (encBarW) {
     sprintf(buf, "%s raw equivalent, %s saved", FmtBytes(vncStats.rawEquiv, a),
 	    FmtBytes(vncStats.rawEquiv - vncStats.rectBytes, b));
-    Text(barX, cy, buf, C_DIM, fnSmall);
+    Text(encBarX, cy, buf, C_DIM, fnSmall);
   }
 
   return h;
@@ -1076,26 +1238,58 @@ DrawEncodings(int x, int y, int w)
  * DrawProfile - where the decode time goes, per encoding.
  */
 
+static int pTime, pShare, pPer, pThru, profBarX, profBarW;
+static double profTotal;
+
+static void
+ProfRow(int x, int cy, const char *name, double rects, double pixels,
+	double t, int color, int sub)
+{
+  int col = rects > 0.0 ? C_FG : C_DIM, bw;
+  double share = profTotal > 0.0 ? t / profTotal : 0.0;
+  char buf[64];
+
+  Text(x + 6 + (sub ? charW * 2 : 0), cy, name, sub ? C_DIM : col, fnSmall);
+  sprintf(buf, "%.1f ms", t * 1000.0);
+  TextRight(pTime, cy, buf, col, fnSmall);
+  sprintf(buf, "%.0f%%", share * 100.0);
+  TextRight(pShare, cy, rects > 0.0 ? buf : "-", col, fnSmall);
+  if (rects > 0.0) {
+    sprintf(buf, "%.0f", t * 1000000.0 / rects);
+    TextRight(pPer, cy, buf, col, fnSmall);
+  }
+  if (t > 0.0) {
+    sprintf(buf, "%.1f", pixels / t / 1000000.0);
+    TextRight(pThru, cy, buf, C_GREEN, fnSmall);
+  }
+  if (profBarW && share > 0.0) {
+    bw = (int)(profBarW * share);
+    if (bw < 1) bw = 1;
+    Fill(profBarX, cy + 2, bw, lineH - 4, color);
+  }
+}
+
 static int
 DrawProfile(int x, int y, int w)
 {
-  int h = PanelHeight(STAT_ENC_COUNT + 3);
-  int i, cy, cTime, cShare, cPer, cThru, barX, barW, bw;
-  double totalTime = 0.0, share;
+  int h = PanelHeight(STAT_ENC_COUNT + 5);
+  int i, cy, row = 0;
+  double jr, jp, jt;
   char buf[64];
 
+  profTotal = 0.0;
   for (i = 0; i < STAT_ENC_COUNT; i++)
-    totalTime += vncStats.enc[i].time;
+    profTotal += vncStats.enc[i].time;
 
   y = Panel("DECODE PROFILE", x, y, w, h);
 
-  cTime = x + 6 + charW * 21;
-  cShare = cTime + charW * 9;
-  cPer = cShare + charW * 12;
-  cThru = cPer + charW * 12;
-  barX = cThru + charW * 3;
-  barW = w - (barX - x) - 8;
-  if (barW < 20) barW = 0;
+  pTime = x + 6 + charW * 21;
+  pShare = pTime + charW * 9;
+  pPer = pShare + charW * 12;
+  pThru = pPer + charW * 12;
+  profBarX = pThru + charW * 3;
+  profBarW = w - (profBarX - x) - 8;
+  if (profBarW < 20) profBarW = 0;
 
   if (!statsProfiling) {
     Text(x + 6, y, "profiling starts when this window is first opened",
@@ -1104,41 +1298,33 @@ DrawProfile(int x, int y, int w)
   }
 
   Text(x + 6, y, "encoding", C_DIM, fnSmall);
-  TextRight(cTime, y, "decode", C_DIM, fnSmall);
-  TextRight(cShare, y, "share", C_DIM, fnSmall);
-  TextRight(cPer, y, "us/rect", C_DIM, fnSmall);
-  TextRight(cThru, y, "Mpix/s", C_DIM, fnSmall);
+  TextRight(pTime, y, "decode", C_DIM, fnSmall);
+  TextRight(pShare, y, "share", C_DIM, fnSmall);
+  TextRight(pPer, y, "us/rect", C_DIM, fnSmall);
+  TextRight(pThru, y, "Mpix/s", C_DIM, fnSmall);
   y += lineH;
 
   for (i = 0; i < STAT_ENC_COUNT; i++) {
-    int col = vncStats.enc[i].rects ? C_FG : C_DIM;
-    double t = vncStats.enc[i].time;
+    ProfRow(x, y + row++ * lineH, encNames[i], (double)vncStats.enc[i].rects,
+	    vncStats.enc[i].pixels, vncStats.enc[i].time, C_ORANGE, 0);
 
-    cy = y + i * lineH;
-    share = totalTime > 0.0 ? t / totalTime : 0.0;
+    if (i != STAT_ENC_TIGHT || !vncStats.enc[i].rects)
+      continue;
 
-    Text(x + 6, cy, encNames[i], col, fnSmall);
-    sprintf(buf, "%.1f ms", t * 1000.0);
-    TextRight(cTime, cy, buf, col, fnSmall);
-    sprintf(buf, "%.0f%%", share * 100.0);
-    TextRight(cShare, cy, vncStats.enc[i].rects ? buf : "-", col, fnSmall);
-    if (vncStats.enc[i].rects) {
-      sprintf(buf, "%.0f", t * 1000000.0 / vncStats.enc[i].rects);
-      TextRight(cPer, cy, buf, col, fnSmall);
-    }
-    if (t > 0.0) {
-      sprintf(buf, "%.1f", vncStats.enc[i].pixels / t / 1000000.0);
-      TextRight(cThru, cy, buf, C_GREEN, fnSmall);
-    }
-    if (barW && share > 0.0) {
-      bw = (int)(barW * share);
-      if (bw < 1) bw = 1;
-      Fill(barX, cy + 2, bw, lineH - 4, C_ORANGE);
-    }
+    jr = (double)vncStats.tightJpeg;
+    jp = vncStats.tightJpegPixels;
+    jt = vncStats.tightJpegTime;
+    ProfRow(x, y + row++ * lineH, "jpeg", jr, jp, jt, C_YELLOW, 1);
+
+    jr = (double)vncStats.enc[i].rects - jr;
+    jp = vncStats.enc[i].pixels - jp;
+    jt = vncStats.enc[i].time - jt;
+    ProfRow(x, y + row++ * lineH, "non-jpeg", jr > 0.0 ? jr : 0.0,
+	    jp > 0.0 ? jp : 0.0, jt > 0.0 ? jt : 0.0, C_VIOLET, 1);
   }
 
   /* where the session wall clock went */
-  cy = y + STAT_ENC_COUNT * lineH + 2;
+  cy = y + row * lineH + 2;
   {
     double session = StatsTime() - vncStats.startTime;
     double dec = vncStats.decodeTime, wait = vncStats.waitTime;
@@ -1159,6 +1345,118 @@ DrawProfile(int x, int y, int w)
     sprintf(buf, "decode %.1fs (%.1f%%)   network wait %.1fs (%.1f%%)   "
 	    "idle %.1fs", dec, 100.0 * dec / session, wait,
 	    100.0 * wait / session, idle);
+    Text(x + 6, cy + lineH, buf, C_DIM, fnSmall);
+  }
+
+  return h;
+}
+
+
+/*
+ * DrawXEvents - where the local X11 event loop spends its time.  A viewer
+ * that is pinned at 100% CPU with an idle server is nearly always drowning
+ * in one kind of event, and this is the table that names it.
+ */
+
+static int
+DrawXEvents(int x, int y, int w)
+{
+  int h = PanelHeight(STAT_XEV_COUNT + 5);
+  int i, cy, cCount, cRate, cTime, cShare, cPer, barX, barW, bw;
+  double session = StatsTime() - vncStats.startTime;
+  double share, t;
+  char buf[64];
+
+  y = Panel("X EVENT PROFILE", x, y, w, h);
+
+  cCount = x + 6 + charW * 20;
+  cRate = cCount + charW * 11;
+  cTime = cRate + charW * 12;
+  cShare = cTime + charW * 9;
+  cPer = cShare + charW * 12;
+  barX = cPer + charW * 3;
+  barW = w - (barX - x) - 8;
+  if (barW < 20) barW = 0;
+
+  if (!statsProfiling) {
+    Text(x + 6, y, "profiling starts when this window is first opened",
+	 C_DIM, fnSmall);
+    return h;
+  }
+
+  if (session <= 0.0)
+    session = 1.0;
+
+  Text(x + 6, y, "event", C_DIM, fnSmall);
+  TextRight(cCount, y, "count", C_DIM, fnSmall);
+  TextRight(cRate, y, "per second", C_DIM, fnSmall);
+  TextRight(cTime, y, "dispatch", C_DIM, fnSmall);
+  TextRight(cShare, y, "share", C_DIM, fnSmall);
+  TextRight(cPer, y, "us/event", C_DIM, fnSmall);
+  if (barW)
+    Text(barX, y, "share of dispatch time", C_DIM, fnSmall);
+  y += lineH;
+
+  for (i = 0; i < STAT_XEV_COUNT; i++) {
+    int col = vncStats.xev[i] ? C_FG : C_DIM;
+
+    cy = y + i * lineH;
+    t = vncStats.xevTime[i];
+    share = vncStats.xDispatch > 0.0 ? t / vncStats.xDispatch : 0.0;
+
+    Text(x + 6, cy, xevNames[i], col, fnSmall);
+    TextRight(cCount, cy, FmtCount((double)vncStats.xev[i], buf), col, fnSmall);
+    if (vncStats.xev[i]) {
+      sprintf(buf, "%.1f", vncStats.xev[i] / session);
+      TextRight(cRate, cy, buf, col, fnSmall);
+      sprintf(buf, "%.1f ms", t * 1000.0);
+      TextRight(cTime, cy, buf, col, fnSmall);
+      sprintf(buf, "%.0f%%", share * 100.0);
+      TextRight(cShare, cy, buf, col, fnSmall);
+      sprintf(buf, "%.0f", t * 1000000.0 / vncStats.xev[i]);
+      TextRight(cPer, cy, buf, col, fnSmall);
+    }
+    if (barW && share > 0.0) {
+      bw = (int)(barW * share);
+      if (bw < 1) bw = 1;
+      Fill(barX, cy + 2, bw, lineH - 4, C_PINK);
+    }
+  }
+
+  cy = y + STAT_XEV_COUNT * lineH;
+  Text(x + 6, cy, "total", C_FG, fnBold);
+  TextRight(cCount, cy, FmtCount((double)vncStats.xEvents, buf), C_FG, fnSmall);
+  sprintf(buf, "%.1f", vncStats.xEvents / session);
+  TextRight(cRate, cy, buf, C_FG, fnSmall);
+  sprintf(buf, "%.1f ms", vncStats.xDispatch * 1000.0);
+  TextRight(cTime, cy, buf, C_FG, fnSmall);
+  sprintf(buf, "%.1f%%", 100.0 * vncStats.xDispatch / session);
+  TextRight(cShare, cy, buf, C_GREEN, fnSmall);
+  if (vncStats.xEvents) {
+    sprintf(buf, "%.0f", vncStats.xDispatch * 1000000.0 / vncStats.xEvents);
+    TextRight(cPer, cy, buf, C_FG, fnSmall);
+  }
+  if (barW)
+    Text(barX, cy, "of session wall clock", C_DIM, fnSmall);
+
+  /* how much of the wall clock the process was actually on a CPU */
+  cy += lineH + 2;
+  {
+    double idle = session - vncStats.cpuUser - vncStats.cpuSys;
+    int fullW = w - 12;
+    int wu, ws;
+
+    if (idle < 0.0) idle = 0.0;
+    wu = (int)(fullW * vncStats.cpuUser / session);
+    ws = (int)(fullW * vncStats.cpuSys / session);
+    Fill(x + 6, cy + 2, wu, lineH - 4, C_RED);
+    Fill(x + 6 + wu, cy + 2, ws, lineH - 4, C_ORANGE);
+    Fill(x + 6 + wu + ws, cy + 2, fullW - wu - ws, lineH - 4, C_PANEL);
+    Frame(x + 6, cy + 2, fullW, lineH - 4, C_GRID);
+
+    sprintf(buf, "user %.1fs (%.1f%%)   system %.1fs (%.1f%%)   off cpu %.1fs",
+	    vncStats.cpuUser, 100.0 * vncStats.cpuUser / session,
+	    vncStats.cpuSys, 100.0 * vncStats.cpuSys / session, idle);
     Text(x + 6, cy + lineH, buf, C_DIM, fnSmall);
   }
 
@@ -1421,6 +1719,65 @@ BuildMessageItems(void)
 }
 
 static void
+BuildX11Items(void)
+{
+  char v[128], a[32], b[32];
+  double session = StatsTime() - vncStats.startTime;
+  double cpu = vncStats.cpuUser + vncStats.cpuSys;
+
+  ClearItems();
+
+  if (session <= 0.0)
+    session = 1.0;
+
+  sprintf(v, "%.1f %% avg  (peak %.1f %%)", 100.0 * cpu / session, peakCpu);
+  AddItem("Client CPU", v);
+
+  sprintf(v, "%.2f s user / %.2f s system", vncStats.cpuUser, vncStats.cpuSys);
+  AddItem("CPU time", v);
+
+  sprintf(v, "%.2f ms", vncStats.updates ? cpu * 1000.0 / vncStats.updates
+					 : 0.0);
+  AddItem("CPU per update", v);
+
+  sprintf(v, "%s  (%.1f/s)", FmtCount((double)vncStats.xEvents, a),
+	  vncStats.xEvents / session);
+  AddItem("X events", v);
+
+  sprintf(v, "%.2f s  (%.1f %% of wall)", vncStats.xDispatch,
+	  100.0 * vncStats.xDispatch / session);
+  AddItem("Event dispatch", v);
+
+  sprintf(v, "%.3f ms", vncStats.xEvents ?
+	  vncStats.xDispatch * 1000.0 / vncStats.xEvents : 0.0);
+  AddItem("Per event", v);
+
+  sprintf(v, "%lu motion / %lu expose / %lu key", vncStats.xev[STAT_XEV_MOTION],
+	  vncStats.xev[STAT_XEV_EXPOSE], vncStats.xev[STAT_XEV_KEY]);
+  AddItem("Busiest events", v);
+
+  sprintf(v, "%lu put / %lu shm", vncStats.putImages, vncStats.shmPutImages);
+  AddItem("X images", v);
+
+  sprintf(v, "%lu copyarea / %lu fillrect", vncStats.copyAreas,
+	  vncStats.fillRects);
+  AddItem("X draw ops", v);
+
+  sprintf(v, "%s  (%s per update)", FmtCount(vncStats.blitPixels, a),
+	  FmtCount(vncStats.updates ? vncStats.blitPixels / vncStats.updates
+				    : 0.0, b));
+  AddItem("Pixels blitted", v);
+
+  sprintf(v, "%.1f s decode / %.1f s net wait", vncStats.decodeTime,
+	  vncStats.waitTime);
+  AddItem("Time split", v);
+
+  sprintf(v, "%s reads / %s waits", FmtCount((double)vncStats.sockReads, a),
+	  FmtCount((double)vncStats.sockWaits, b));
+  AddItem("Socket loop", v);
+}
+
+static void
 BuildStatisticItems(void)
 {
   char v[128], a[32], b[32];
@@ -1530,7 +1887,7 @@ DrawOverview(int W, int H, int top, int bottom)
   y += DrawItems("CONNECTION", PAD, y, W - 2 * PAD, 44 * charW) + PAD;
   chartsY = y;
 
-  encH = PanelHeight(STAT_ENC_COUNT + 2);
+  encH = PanelHeight(STAT_ENC_COUNT + 4);
   chartsH = bottom - chartsY - PAD - encH;
 
   if (chartsH > 60) {
@@ -1568,6 +1925,23 @@ DrawProfilePage(int W, int H, int top, int bottom)
     half = (W - 2 * PAD) / 2;
     DrawChart(CH_DECODE, PAD, y, half - PAD / 2, rest);
     DrawChart(CH_LOAD, PAD + half, y, half - PAD / 2, rest);
+  }
+}
+
+static void
+DrawX11Page(int W, int H, int top, int bottom)
+{
+  int y = top, w = W - 2 * PAD, rest, half;
+
+  BuildX11Items();
+  y += DrawItems("CLIENT AND X11 COST", PAD, y, w, 46 * charW) + PAD;
+  y += DrawXEvents(PAD, y, w) + PAD;
+
+  rest = bottom - y;
+  if (rest > 70) {
+    half = w / 2;
+    DrawChart(CH_CPU, PAD, y, half - PAD / 2, rest);
+    DrawChart(CH_XEV, PAD + half, y, half - PAD / 2, rest);
   }
 }
 
@@ -1651,13 +2025,14 @@ Redraw(void)
 
   switch (page) {
   case PG_PROFILE:  DrawProfilePage(W, H, top, bottom);  break;
+  case PG_X11:      DrawX11Page(W, H, top, bottom);      break;
   case PG_PROTOCOL: DrawProtocolPage(W, H, top, bottom); break;
   case PG_STATS:    DrawStatsPage(W, H, top, bottom);    break;
   default:          DrawOverview(W, H, top, bottom);     break;
   }
 
   sprintf(buf,
-	  "1-4 or Tab = page   r = reset   p = %s   q = close      "
+	  "1-5 or Tab = page   r = reset   p = %s   q = close      "
 	  "%d samples over %d s   %d log lines",
 	  statsPaused ? "resume" : "pause", histCount,
 	  HIST * SAMPLE_MS / 1000, logCount);
@@ -1882,6 +2257,19 @@ ShowStats(Widget w, XEvent *ev, String *params, Cardinal *num_params)
   }
 
   Redraw();
+}
+
+
+/*
+ * StatsStartup - honour -stats by opening the window as soon as the viewer
+ * is up, so that a session can be profiled from its first frame.
+ */
+
+void
+StatsStartup(void)
+{
+  if (appData.showStats)
+    ShowStats(NULL, NULL, NULL, NULL);
 }
 
 

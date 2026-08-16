@@ -561,6 +561,9 @@ DecompressJpegRectBPP(int x, int y, int w, int h)
   CARDBPP *pixelPtr;
   JSAMPROW rowPointer[1];
   int dx, dy;
+#ifdef VNCSTATS
+  double jpegStart = 0.0;
+#endif
 
   if (!tightJpegReported) {
     tightJpegReported = True;
@@ -587,6 +590,8 @@ DecompressJpegRectBPP(int x, int y, int w, int h)
 
   STATS(vncStats.tightJpeg++);
   STATS(vncStats.tightJpegBytes += compressedLen);
+  STATS(vncStats.tightJpegPixels += (double)w * h);
+  STATS(if (statsProfiling) jpegStart = StatsTime());
 
   cinfo.err = jpeg_std_error(&jerr);
   jpeg_create_decompress(&cinfo);
@@ -626,6 +631,9 @@ DecompressJpegRectBPP(int x, int y, int w, int h)
 
   jpeg_destroy_decompress(&cinfo);
   free(compressedData);
+
+  STATS(if (jpegStart > 0.0)
+	  vncStats.tightJpegTime += StatsTime() - jpegStart);
 
   return !jpegError;
 }

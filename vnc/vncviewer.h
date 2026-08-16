@@ -151,6 +151,10 @@ typedef struct {
   Bool useRemoteResize;
   Bool useContinuousUpdates;
 
+#ifdef VNCSTATS
+  Bool showStats;		/* -stats: open the diagnostics window at once */
+#endif
+
 } AppData;
 
 extern AppData appData;
@@ -360,6 +364,25 @@ typedef struct {
   double time;			/* seconds spent decoding, profiling only */
 } VncEncStats;
 
+/* X11 events are grouped rather than counted per type: what matters is which
+   kind of traffic is burning the client, not the exact event number. */
+
+enum {
+  STAT_XEV_MOTION = 0,
+  STAT_XEV_KEY,
+  STAT_XEV_BUTTON,
+  STAT_XEV_CROSSING,
+  STAT_XEV_FOCUS,
+  STAT_XEV_KEYMAP,
+  STAT_XEV_EXPOSE,
+  STAT_XEV_STRUCTURE,
+  STAT_XEV_PROPERTY,
+  STAT_XEV_SELECTION,
+  STAT_XEV_CLIENTMSG,
+  STAT_XEV_OTHER,
+  STAT_XEV_COUNT
+};
+
 /* buckets for the distribution histograms */
 #define STAT_NBUCKETS 8
 
@@ -396,7 +419,7 @@ typedef struct {
   /* tight decoder */
   unsigned long tightFill, tightJpeg, tightBasic, tightRaw;
   unsigned long tightCopy, tightPalette, tightGradient, tightResets;
-  double tightJpegBytes;
+  double tightJpegBytes, tightJpegPixels, tightJpegTime;
 
   /* zlib and zrle decoders */
   double zlibIn, zlibOut, zrleIn, zrleOut;
@@ -405,6 +428,13 @@ typedef struct {
   /* X11 output */
   unsigned long putImages, shmPutImages, copyAreas, fillRects;
   double blitPixels;
+
+  /* X11 input: what the local event loop costs.  xDispatch overlaps waitTime,
+     since dispatching is what the viewer does while the socket is dry. */
+  unsigned long xEvents, xev[STAT_XEV_COUNT];
+  double xevTime[STAT_XEV_COUNT];
+  double xDispatch;
+  double cpuUser, cpuSys;	/* process CPU seconds at the last sample */
 
   /* timing */
   double decodeTime;
@@ -438,6 +468,8 @@ extern void StatsUpdateEnd(void);
 extern void StatsUpdateRequested(void);
 extern void StatsLog(int dir, const char *text, double bytes, double aux);
 extern Bool StatsFencePong(int len, char *data);
+extern void StatsProcessEvent(XtInputMask mask);
+extern void StatsStartup(void);
 extern void ShowStats(Widget w, XEvent *ev, String *params,
 		      Cardinal *num_params);
 extern void HideStats(Widget w, XEvent *ev, String *params,
@@ -461,6 +493,8 @@ extern void PauseStats(Widget w, XEvent *ev, String *params,
 #define StatsUpdateRequested()
 #define StatsLog(dir, text, bytes, aux)
 #define StatsFencePong(len, data) False
+#define StatsProcessEvent(mask) XtAppProcessEvent(appContext, (mask))
+#define StatsStartup()
 
 typedef struct { int unused; } VncRectProfile;
 

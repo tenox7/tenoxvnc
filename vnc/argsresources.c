@@ -65,7 +65,8 @@ char *fallback_resources[] = {
      <Key>1: StatsPage(1)\\n\
      <Key>2: StatsPage(2)\\n\
      <Key>3: StatsPage(3)\\n\
-     <Key>4: StatsPage(4)",
+     <Key>4: StatsPage(4)\\n\
+     <Key>5: StatsPage(5)",
   "*statsCanvas.translations: #override\\n\
      <Key>q: HideStats()\\n\
      <Key>Escape: HideStats()\\n\
@@ -75,7 +76,8 @@ char *fallback_resources[] = {
      <Key>1: StatsPage(1)\\n\
      <Key>2: StatsPage(2)\\n\
      <Key>3: StatsPage(3)\\n\
-     <Key>4: StatsPage(4)",
+     <Key>4: StatsPage(4)\\n\
+     <Key>5: StatsPage(5)",
 #endif
 
   NULL
@@ -198,6 +200,12 @@ static XtResource appDataResourceList[] = {
 
   {"continuousUpdates", "ContinuousUpdates", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, useContinuousUpdates), XtRImmediate, (XtPointer) True}
+
+#ifdef VNCSTATS
+  ,
+  {"showStats", "ShowStats", XtRBool, sizeof(Bool),
+   XtOffsetOf(AppData, showStats), XtRImmediate, (XtPointer) False}
+#endif
 };
 
 
@@ -230,6 +238,10 @@ XrmOptionDescRec cmdLineOptions[] = {
   {"-remoteresize",  "*remoteResize",       XrmoptionNoArg,  "True"},
   {"-noremoteresize","*remoteResize",       XrmoptionNoArg,  "False"},
   {"-nocontinuous",  "*continuousUpdates",  XrmoptionNoArg,  "False"}
+#ifdef VNCSTATS
+  ,
+  {"-stats",         "*showStats",          XrmoptionNoArg,  "True"}
+#endif
 
 };
 
@@ -369,6 +381,9 @@ usage(void)
 	  "        -autopass\n"
 	  "        -noremoteresize (don't resize remote desktop to fit window)\n"
 	  "        -nocontinuous (don't use continuous updates)\n"
+#ifdef VNCSTATS
+	  "        -stats (open the diagnostics window at startup)\n"
+#endif
 	  "\n"
 	  "If the VNC_PASSWORD environment variable is set, its value is used\n"
 	  "as the password for standard VNC authentication.\n"

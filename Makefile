@@ -131,7 +131,7 @@ osr6:
 	  LDFLAGS="-L/usr/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
 osf1:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=cc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 # MIPSpro cc, -woff mutes unused-variable warnings. mips3 runs on any 6.5 box,
