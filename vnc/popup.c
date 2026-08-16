@@ -145,10 +145,11 @@ MenuBuild(void)
   y += rowH;
   XwAddButton(&menu, "Send F8", P_SENDF8, pad, y);
   y += rowH;
-#ifdef VNCSTATS
   XwAddButton(&menu, "Diagnostics...", P_STATS, pad, y);
-  y += rowH;
+#ifndef VNCSTATS
+  menu.items[menu.nItems - 1].disabled = True;	/* not compiled in */
 #endif
+  y += rowH;
 
   y += 2;
   sep2 = menu.nItems;
