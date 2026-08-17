@@ -21,7 +21,7 @@ OBJECTS = $(VIEWER_SRCS:.c=.o) $(CODEC_OBJS)
 
 # Auto detect OS
 all:
-	@s=`uname -s`; r=`uname -r`; v=`uname -v`; \
+	@s=`uname -s`; r=`uname -r`; v=`uname -v`; m=`uname -m`; \
 	case "$$s" in \
 	  Linux)   t=linux;; \
 	  Darwin)  t=macos;; \
@@ -29,7 +29,12 @@ all:
 	  AIX)     t=aix;; \
 	  OSF1)    t=osf1;; \
 	  NetBSD)  t=netbsd;; \
-	  HP-UX)   case "$$r" in *.09.*) t=hpux9;; *.10.*) t=hpux10;; *) t=hpux11;; esac;; \
+	  HP-UX)   case "$$r" in \
+	             *.09.*) t=hpux9;; \
+	             *.10.*) t=hpux10;; \
+	             *.11.31*) case "$$m" in ia64) t=hpux1131ia64;; *) t=hpux11;; esac;; \
+	             *) t=hpux11;; \
+	           esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix53;; *) t=irix65;; esac;; \
 	  UnixWare|UNIX_SV) t=unixware;; \
 	  SCO_SV)  case "$$v" in 6.*) t=osr6;; *) t=osr5;; esac;; \
@@ -99,6 +104,14 @@ hpux11:
 	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="$(HPUX11_XLIBS) -lm" $(TARGET)
 
+# 11.31 on Itanium; 11.31 also runs on PA-RISC, hence both are matched above.
+# /usr/lib and /usr/lib/X11R6 are PA-RISC SOM: "Mismatched ABI (not an ELF
+# file)". The ELF libs are in /usr/lib/hpux32, the aCC default. No gcc here.
+hpux1131ia64:
+	$(MAKE) CC=/opt/ansic/bin/aCC \
+	  CFLAGS="-Ae +O3 +DSitanium2 $(INCS) -DMITSHM $(STATS)" \
+	  LDFLAGS="-L/usr/lib/hpux32 -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
+
 aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
@@ -156,4 +169,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd

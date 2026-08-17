@@ -58,11 +58,14 @@ static void SetReducedFormat(int level);
 static void SetupColorMap();
 static void AllocateExactColors();
 static Bool AllocateColor(int r, int g, int b);
+static int FirstBit(unsigned long mask);
 
 
 /*
  * Bits() is how many bits a component with this maximum value needs, and
  * ColorIndex() packs a color into the pixel the server will send us for it.
+ * FirstBit() is the shift for an X11 component mask - not ffs(), which some
+ * systems never declare and which takes an int, while the masks are longs.
  */
 
 static int
@@ -73,6 +76,20 @@ Bits(int max)
   while (max) {
     n++;
     max >>= 1;
+  }
+  return n;
+}
+
+static int
+FirstBit(unsigned long mask)
+{
+  int n = 0;
+
+  if (!mask)
+    return -1;
+  while (!(mask & 1)) {
+    n++;
+    mask >>= 1;
   }
   return n;
 }
@@ -144,9 +161,9 @@ SetVisualAndCmap()
     myFormat.depth = visdepth;
     myFormat.trueColor = 1;
     myFormat.bigEndian = (ImageByteOrder(dpy) == MSBFirst);
-    myFormat.redShift = ffs(vis->red_mask) - 1;
-    myFormat.greenShift = ffs(vis->green_mask) - 1;
-    myFormat.blueShift = ffs(vis->blue_mask) - 1;
+    myFormat.redShift = FirstBit(vis->red_mask);
+    myFormat.greenShift = FirstBit(vis->green_mask);
+    myFormat.blueShift = FirstBit(vis->blue_mask);
     myFormat.redMax = vis->red_mask >> myFormat.redShift;
     myFormat.greenMax = vis->green_mask >> myFormat.greenShift;
     myFormat.blueMax = vis->blue_mask >> myFormat.blueShift;
@@ -305,9 +322,9 @@ GetTrueColorVisualAndCmap(int depth)
     myFormat.depth = visdepth;
     myFormat.trueColor = 1;
     myFormat.bigEndian = (ImageByteOrder(dpy) == MSBFirst);
-    myFormat.redShift = ffs(vis->red_mask) - 1;
-    myFormat.greenShift = ffs(vis->green_mask) - 1;
-    myFormat.blueShift = ffs(vis->blue_mask) - 1;
+    myFormat.redShift = FirstBit(vis->red_mask);
+    myFormat.greenShift = FirstBit(vis->green_mask);
+    myFormat.blueShift = FirstBit(vis->blue_mask);
     myFormat.redMax = vis->red_mask >> myFormat.redShift;
     myFormat.greenMax = vis->green_mask >> myFormat.greenShift;
     myFormat.blueMax = vis->blue_mask >> myFormat.blueShift;

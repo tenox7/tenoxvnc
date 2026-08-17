@@ -23,11 +23,13 @@
  * jidctflt, jdatasrc, jdtrans and jdmerge are gone entirely.  tight.c decodes
  * to JCS_RGB at 1:1 and needs none of it.
  *
- * The module text is verbatim upstream apart from two things:
+ * The module text is verbatim upstream apart from three things:
  *   - jdcoefct.c's static start_input_pass is renamed coef_start_input_pass,
  *     jdinput.c has one under the same name.
  *   - jdcolor.c's private FIX is undefined before jdct.h and jidctint.c
  *     define their own.
+ *   - jcomapi.c's j_common_ptr -> j_decompress_ptr cast in jpeg_abort() goes
+ *     through void *, or compilers that track pointer alignment warn about it.
  * Include guards were also added to jmemsys.h, jdct.h, jdhuff.h and
  * jpegint.h.  jerror.h deliberately has none; jerror.c includes it twice to
  * build the message table.
@@ -82,7 +84,7 @@ jpeg_abort (j_common_ptr cinfo)
     /* Try to keep application from accessing now-deleted marker list.
      * A bit kludgy to do it here, but this is the most central place.
      */
-    ((j_decompress_ptr) cinfo)->marker_list = NULL;
+    ((j_decompress_ptr) (void *) cinfo)->marker_list = NULL;
   } else {
     cinfo->global_state = CSTATE_START;
   }
