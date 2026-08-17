@@ -1,33 +1,23 @@
 
 
 CC = gcc
-INCS = -Ivnc -Izlib -Ijpeg
+INCS = -I.
 CFLAGS = -O2 $(INCS) -DMITSHM $(STATS)
 LDFLAGS = -lXt -lXext -lX11 -lm
 TARGET = tenoxvnc
 # Diag under F8 Menu. Off unless VNCSTATS=true make <target>
 STATS = $(VNCSTATS:true=-DVNCSTATS)
 
-VIEWER_SRCS = vnc/argsresources.c vnc/caps.c vnc/color.c vnc/cursor.c \
-	vnc/desktop.c vnc/dialogs.c vnc/fullscreen.c vnc/listen.c vnc/misc.c \
-	vnc/popup.c vnc/rfbproto.c vnc/selection.c vnc/shm.c vnc/sockets.c \
-	vnc/stats.c vnc/tunnel.c vnc/vncviewer.c vnc/vncauth.c vnc/d3des.c \
-	vnc/xwidgets.c vnc/scroll.c
+VIEWER_SRCS = argsresources.c caps.c color.c cursor.c desktop.c dialogs.c \
+	fullscreen.c listen.c misc.c popup.c rfbproto.c selection.c shm.c \
+	sockets.c stats.c tunnel.c vncviewer.c vncauth.c d3des.c xwidgets.c \
+	scroll.c
 
-# corre.c hextile.c rre.c tight.c zlib.c zrle.c are #included by rfbproto.c
+# corre.c hextile.c rre.c tight.c zlibenc.c zrle.c are #included by rfbproto.c
 
-ZLIB_OBJS = zlib/adler32.o zlib/crc32.o zlib/inflate.o zlib/inffast.o \
-	zlib/inftrees.o zlib/zutil.o
+CODEC_OBJS = zlib.o jpeg.o
 
-JPEG_OBJS = jpeg/jcomapi.o jpeg/jutils.o jpeg/jerror.o jpeg/jmemmgr.o \
-	jpeg/jmemnobs.o jpeg/jdapimin.o jpeg/jdapistd.o jpeg/jdatasrc.o \
-	jpeg/jdcoefct.o jpeg/jdcolor.o jpeg/jddctmgr.o jpeg/jdhuff.o \
-	jpeg/jdinput.o jpeg/jdmainct.o jpeg/jdmarker.o jpeg/jdmaster.o \
-	jpeg/jdmerge.o jpeg/jdphuff.o jpeg/jdpostct.o jpeg/jdsample.o \
-	jpeg/jdtrans.o jpeg/jquant1.o jpeg/jquant2.o jpeg/jidctflt.o \
-	jpeg/jidctfst.o jpeg/jidctint.o jpeg/jidctred.o
-
-OBJECTS = $(VIEWER_SRCS:.c=.o) $(ZLIB_OBJS) $(JPEG_OBJS)
+OBJECTS = $(VIEWER_SRCS:.c=.o) $(CODEC_OBJS)
 
 # Auto detect OS
 all:
@@ -54,18 +44,17 @@ VERSTAMP =
 $(TARGET): $(VERSTAMP) $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
-# vnc/version.h gets the latest git tag; no-op without git
+# version.h gets the latest git tag; no-op without git
 version:
 	@v=`git describe --tags --abbrev=0 2>/dev/null`; test -n "$$v" || exit 0; \
 	sed 's/TENOXVNC_VERSION ".*"/TENOXVNC_VERSION "'"$$v"'"/' \
-	  vnc/version.h > vnc/version.tmp; \
-	cmp -s vnc/version.tmp vnc/version.h || \
-	  { echo "=> version $$v"; cp vnc/version.tmp vnc/version.h; }; \
-	rm -f vnc/version.tmp
+	  version.h > version.tmp; \
+	cmp -s version.tmp version.h || \
+	  { echo "=> version $$v"; cp version.tmp version.h; }; \
+	rm -f version.tmp
 
 # POSIX suffix rule, not a GNU "%.o: %.c" pattern rule: HP-UX native make
-# ignores pattern rules and its built-in .c.o has no -o $@, so objects land in
-# the cwd instead of next to the source and the link fails on missing vnc/*.o
+# ignores pattern rules and its built-in .c.o has no -o $@
 .SUFFIXES: .c .o
 
 .c.o:
@@ -161,7 +150,7 @@ netbsd:
 	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 clean:
-	rm -f *.o */*.o $(TARGET)
+	rm -f *.o $(TARGET)
 
 install: all
 	cp $(TARGET) /usr/local/bin/

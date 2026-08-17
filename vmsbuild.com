@@ -23,9 +23,6 @@ $! Run from the procedure's own directory (rsh lands in SYS$LOGIN)
 $ PROC = F$ENVIRONMENT("PROCEDURE")
 $ SET DEFAULT 'F$PARSE(PROC,,,"DEVICE","SYNTAX_ONLY")''F$PARSE(PROC,,,"DIRECTORY","SYNTAX_ONLY")'
 $ SRC = F$ENVIRONMENT("DEFAULT")
-$ VNCDIR = SRC - "]" + ".VNC]"
-$ ZLIBDIR = SRC - "]" + ".ZLIB]"
-$ JPEGDIR = SRC - "]" + ".JPEG]"
 $!
 $! The work directory has to be a concrete path.  SYS$SCRATCH translates to
 $! SYS$SYSROOT:, which is a search list (SYS$SPECIFIC:,SYS$COMMON:) - a
@@ -45,14 +42,10 @@ $ IF F$PARSE(WORK) .EQS. "" THEN CREATE/DIRECTORY 'WORK'
 $ SAY "Work directory: ", WORK
 $ GOSUB PURGEWORK
 $!
-$! vnc, zlib and jpeg have no filenames in common, so they can share one
-$! directory.  Flattening them keeps #include "zlib.c" (vnc) and
-$! #include <zlib.h> (zlib) resolving to the right files, and keeps the
-$! compile command short - see the note on CFLAGS below.
+$! The Zlib-encoding handler is ZLIBENC.C because the vendored library is
+$! ZLIB.C and the two cannot share a name.
 $ SAY "Copying sources..."
-$ COPY 'VNCDIR'*.C;*,'VNCDIR'*.H;* 'WORK'*
-$ COPY 'ZLIBDIR'*.C;*,'ZLIBDIR'*.H;* 'WORK'*
-$ COPY 'JPEGDIR'*.C;*,'JPEGDIR'*.H;* 'WORK'*
+$ COPY 'SRC'*.C;*,'SRC'*.H;* 'WORK'*
 $ COPY 'SRC'TENOXVNC.OPT 'WORK'*
 $!
 $ SET DEFAULT 'WORK'
@@ -88,18 +81,9 @@ $ GOSUB COMPILE
 $ LIST = "VNCAUTH VNCVIEWER VMS XWIDGETS SCROLL"
 $ GOSUB COMPILE
 $!
-$ SAY "Compiling zlib..."
-$ LIST = "ADLER32 CRC32 INFLATE INFFAST INFTREES ZUTIL"
-$ GOSUB COMPILE
-$!
-$ SAY "Compiling jpeg..."
-$ LIST = "JCOMAPI JUTILS JERROR JMEMMGR JMEMNOBS JDAPIMIN JDAPISTD JDATASRC"
-$ GOSUB COMPILE
-$ LIST = "JDCOEFCT JDCOLOR JDDCTMGR JDHUFF JDINPUT JDMAINCT JDMARKER JDMASTER"
-$ GOSUB COMPILE
-$ LIST = "JDMERGE JDPHUFF JDPOSTCT JDSAMPLE JDTRANS JQUANT1 JQUANT2"
-$ GOSUB COMPILE
-$ LIST = "JIDCTFLT JIDCTFST JIDCTINT JIDCTRED"
+$! zlib and jpeg are one source and one header each now, all at the top level.
+$ SAY "Compiling zlib and jpeg..."
+$ LIST = "ZLIB JPEG"
 $ GOSUB COMPILE
 $!
 $ SAY "Linking..."
