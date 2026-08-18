@@ -740,10 +740,16 @@ CopyDataToImage(char *buf, int x, int y, int width, int height)
     char *scr = (image->data + y * scrWidthInBytes
 		 + x * myFormat.bitsPerPixel / 8);
 
-    for (h = 0; h < height; h++) {
-      memcpy(scr, buf, widthInBytes);
-      buf += widthInBytes;
-      scr += scrWidthInBytes;
+    /* A full width rectangle is contiguous in the image, so it goes in one
+       move instead of one per scan line. */
+    if (widthInBytes == scrWidthInBytes) {
+      memcpy(scr, buf, (size_t)widthInBytes * height);
+    } else {
+      for (h = 0; h < height; h++) {
+	memcpy(scr, buf, widthInBytes);
+	buf += widthInBytes;
+	scr += scrWidthInBytes;
+      }
     }
   } else {
     CopyBGR233ToScreen((CARD8 *)buf, x, y, width, height);

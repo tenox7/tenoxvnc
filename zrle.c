@@ -47,6 +47,52 @@ ResetZRLEState(void)
 }
 
 /*
+ * Store one pixel, and fill a run of them.
+ *
+ * These used to be memcpy(dst, src, bytesPP) per pixel.  bytesPP is a
+ * variable, so that can never be inlined - it was a libc call for every
+ * pixel of every tile, 4095 of them to fill one solid 64x64 tile.
+ */
+
+#define ZRLE_PUT(dst, src) \
+  { \
+    (dst)[0] = (src)[0]; \
+    if (bytesPP > 1) { \
+      (dst)[1] = (src)[1]; \
+      if (bytesPP > 2) { \
+	(dst)[2] = (src)[2]; \
+	(dst)[3] = (src)[3]; \
+      } \
+    } \
+  }
+
+static void
+ZrleFill(CARD8 *dst, const CARD8 *src, int n, int bytesPP)
+{
+  CARD8 a, b, c, d;
+
+  if (bytesPP == 1) {
+    a = src[0];
+    while (n-- > 0)
+      *dst++ = a;
+    return;
+  }
+
+  if (bytesPP == 2) {
+    a = src[0]; b = src[1];
+    while (n-- > 0) {
+      *dst++ = a; *dst++ = b;
+    }
+    return;
+  }
+
+  a = src[0]; b = src[1]; c = src[2]; d = src[3];
+  while (n-- > 0) {
+    *dst++ = a; *dst++ = b; *dst++ = c; *dst++ = d;
+  }
+}
+
+/*
  * Read one run length (byte 255 adds 255 and continues; total is sum + 1).
  */
 
@@ -70,7 +116,7 @@ ResetZRLEState(void)
   { \
     if (p + cpixelBytes > end) goto corrupt; \
     if (cpixelBytes == bytesPP) { \
-      memcpy((dst), p, bytesPP); \
+      ZRLE_PUT((dst), p); \
     } else if (cpixelLS != myFormat.bigEndian) { \
       /* color bytes first, pad byte last */ \
       (dst)[0] = p[0]; (dst)[1] = p[1]; (dst)[2] = p[2]; (dst)[3] = 0; \
@@ -243,8 +289,7 @@ HandleZRLE(int rx, int ry, int rw, int rh)
       } else if (subenc == 1) {
 	/* solid color tile */
 	ZRLE_CPIXEL(&zrleTile[0]);
-	for (i = 1; i < npixels; i++)
-	  memcpy(&zrleTile[i * bytesPP], &zrleTile[0], bytesPP);
+	ZrleFill(&zrleTile[bytesPP], &zrleTile[0], npixels - 1, bytesPP);
 
       } else if (subenc >= 2 && subenc <= 16) {
 	/* packed palette */
@@ -269,8 +314,7 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 	    nbits -= bppal;
 	    i = (b >> nbits) & ((1 << bppal) - 1);
 	    if (i >= psize) goto corrupt;
-	    memcpy(&zrleTile[(y * tw + x) * bytesPP], &palette[i * 4],
-		   bytesPP);
+	    ZRLE_PUT(&zrleTile[(y * tw + x) * bytesPP], &palette[i * 4]);
 	  }
 	}
 
@@ -284,8 +328,8 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 	  ZRLE_CPIXEL(pix);
 	  ZRLE_RUN_LENGTH(len);
 	  if (i + len > npixels) goto corrupt;
-	  while (len-- > 0)
-	    memcpy(&zrleTile[i++ * bytesPP], pix, bytesPP);
+	  ZrleFill(&zrleTile[i * bytesPP], pix, len, bytesPP);
+	  i += len;
 	}
 
       } else if (subenc >= 130) {
@@ -309,8 +353,8 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 	  }
 	  if (idx >= psize) goto corrupt;
 	  if (i + len > npixels) goto corrupt;
-	  while (len-- > 0)
-	    memcpy(&zrleTile[i++ * bytesPP], &palette[idx * 4], bytesPP);
+	  ZrleFill(&zrleTile[i * bytesPP], &palette[idx * 4], len, bytesPP);
+	  i += len;
 	}
 
       } else {
