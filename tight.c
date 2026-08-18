@@ -543,21 +543,45 @@ FilterPaletteBPP (int numRows, CARDBPP *dst)
   CARD8 *src = (CARD8 *)buffer;
   CARDBPP *palette = (CARDBPP *)tightPalette;
 
+  /* Walked with pointers rather than indexed.  The indexed form reloaded
+     src[y*w+x] once per bit, so every byte of a mono rectangle was read
+     eight times, and every pixel cost two index multiplies.  On PA-RISC
+     that costs 6x on the mono path; a vectorising compiler does better with
+     the indexed form, but the vintage targets are the ones that matter. */
+
   if (rectColors == 2) {
     w = (rectWidth + 7) / 8;
     for (y = 0; y < numRows; y++) {
-      for (x = 0; x < rectWidth / 8; x++) {
-	for (b = 7; b >= 0; b--)
-	  dst[y*rectWidth+x*8+7-b] = palette[src[y*w+x] >> b & 1];
+      CARD8 *s = src + y * w;
+      CARDBPP *d = dst + y * rectWidth;
+      CARD8 v;
+
+      for (x = rectWidth; x >= 8; x -= 8) {
+	v = *s++;
+	d[0] = palette[(v >> 7) & 1];
+	d[1] = palette[(v >> 6) & 1];
+	d[2] = palette[(v >> 5) & 1];
+	d[3] = palette[(v >> 4) & 1];
+	d[4] = palette[(v >> 3) & 1];
+	d[5] = palette[(v >> 2) & 1];
+	d[6] = palette[(v >> 1) & 1];
+	d[7] = palette[v & 1];
+	d += 8;
       }
-      for (b = 7; b >= 8 - rectWidth % 8; b--) {
-	dst[y*rectWidth+x*8+7-b] = palette[src[y*w+x] >> b & 1];
+      if (x > 0) {
+	v = *s;
+	for (b = 0; b < x; b++)
+	  d[b] = palette[(v >> (7 - b)) & 1];
       }
     }
   } else {
-    for (y = 0; y < numRows; y++)
-      for (x = 0; x < rectWidth; x++)
-	dst[y*rectWidth+x] = palette[(int)src[y*rectWidth+x]];
+    for (y = 0; y < numRows; y++) {
+      CARD8 *s = src + y * rectWidth;
+      CARDBPP *d = dst + y * rectWidth;
+
+      for (x = rectWidth; x > 0; x--)
+	*d++ = palette[*s++];
+    }
   }
 }
 
