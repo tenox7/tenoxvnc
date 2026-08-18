@@ -164,6 +164,9 @@ HandleZRLE(int rx, int ry, int rw, int rh)
       fprintf(stderr, "ZRLE: inflateInit failed\n");
       return False;
     }
+    /* The RFB stream is framed and TCP already checksums it, so skip the
+       adler32 zlib would otherwise run over every decompressed byte. */
+    inflateValidate(&zrleStream, 0);
     zrleStreamActive = True;
   }
 
@@ -174,14 +177,15 @@ HandleZRLE(int rx, int ry, int rw, int rh)
   zrleStream.avail_out = zrleBufSize;
 
   while (remaining > 0) {
-    toRead = (remaining > BUFFER_SIZE) ? BUFFER_SIZE : remaining;
+    char *inPtr;
+    unsigned int inLen;
 
-    if (!ReadFromRFBServer(buffer, toRead))
+    /* Inflate straight out of the socket buffer, no staging copy. */
+    if (!ReadFromRFBServerPeek(&inPtr, (unsigned int)remaining, &inLen))
       return False;
-    remaining -= toRead;
 
-    zrleStream.next_in = (Bytef *)buffer;
-    zrleStream.avail_in = toRead;
+    zrleStream.next_in = (Bytef *)inPtr;
+    zrleStream.avail_in = inLen;
 
     err = inflate(&zrleStream, Z_SYNC_FLUSH);
     if (err != Z_OK && err != Z_STREAM_END && err != Z_BUF_ERROR) {
@@ -192,6 +196,14 @@ HandleZRLE(int rx, int ry, int rw, int rh)
       fprintf(stderr, "ZRLE: inflate buffer overflow\n");
       return False;
     }
+
+    toRead = (int)(inLen - zrleStream.avail_in);
+    if (toRead <= 0) {
+      fprintf(stderr, "ZRLE: inflate made no progress\n");
+      return False;
+    }
+    ReadFromRFBServerSkip((unsigned int)toRead);
+    remaining -= toRead;
   }
 
   p = (CARD8 *)zrleBuf;

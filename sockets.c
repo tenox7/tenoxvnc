@@ -39,7 +39,7 @@ void PrintInHex(char *buf, int len);
 
 Bool errorMessageOnReadFailure = True;
 
-#define BUF_SIZE 8192
+#define BUF_SIZE 65536
 static char buf[BUF_SIZE];
 static char *bufoutptr = buf;
 static unsigned int buffered = 0;
@@ -118,6 +118,35 @@ ProcessXtEvents()
 
 #endif /* !__VMS */
 
+/*
+ * One read() into p, pumping X events for as long as the socket is dry.
+ * Returns the byte count, or -1 on error or EOF.
+ */
+
+static int
+ReadSock(char *p, unsigned int n)
+{
+  for (;;) {
+    int i = read(rfbsock, p, n);
+
+    STATS(if (i > 0) { vncStats.sockIn += i; vncStats.sockReads++; });
+    if (i > 0)
+      return i;
+
+    if (i == 0) {
+      if (errorMessageOnReadFailure)
+	fprintf(stderr, "%s: VNC server closed connection\n", programName);
+      return -1;
+    }
+    if (errno != EWOULDBLOCK && errno != EAGAIN) {
+      fprintf(stderr, "%s", programName);
+      perror(": read");
+      return -1;
+    }
+    ProcessXtEvents();
+  }
+}
+
 Bool
 ReadFromRFBServer(char *out, unsigned int n)
 {
@@ -138,64 +167,63 @@ ReadFromRFBServer(char *out, unsigned int n)
   bufoutptr = buf;
   buffered = 0;
 
-  if (n <= BUF_SIZE) {
-
-    while (buffered < n) {
-      int i = read(rfbsock, buf + buffered, BUF_SIZE - buffered);
-      STATS(if (i > 0) { vncStats.sockIn += i; vncStats.sockReads++; });
-      if (i <= 0) {
-	if (i < 0) {
-	  if (errno == EWOULDBLOCK || errno == EAGAIN) {
-	    ProcessXtEvents();
-	    i = 0;
-	  } else {
-	    fprintf(stderr, "%s", programName);
-	    perror(": read");
-	    return False;
-	  }
-	} else {
-	  if (errorMessageOnReadFailure) {
-	    fprintf(stderr,"%s: VNC server closed connection\n",programName);
-	  }
-	  return False;
-	}
-      }
-      buffered += i;
-    }
-
-    memcpy(out, bufoutptr, n);
-    bufoutptr += n;
-    buffered -= n;
-    return True;
-
-  } else {
-
+  if (n > BUF_SIZE) {
     while (n > 0) {
-      int i = read(rfbsock, out, n);
-      STATS(if (i > 0) { vncStats.sockIn += i; vncStats.sockReads++; });
-      if (i <= 0) {
-	if (i < 0) {
-	  if (errno == EWOULDBLOCK || errno == EAGAIN) {
-	    ProcessXtEvents();
-	    i = 0;
-	  } else {
-	    fprintf(stderr, "%s", programName);
-	    perror(": read");
-	    return False;
-	  }
-	} else {
-	  if (errorMessageOnReadFailure) {
-	    fprintf(stderr,"%s: VNC server closed connection\n",programName);
-	  }
-	  return False;
-	}
-      }
+      int i = ReadSock(out, n);
+      if (i < 0)
+	return False;
       out += i;
       n -= i;
     }
-
     return True;
   }
+
+  while (buffered < n) {
+    int i = ReadSock(buf + buffered, BUF_SIZE - buffered);
+    if (i < 0)
+      return False;
+    buffered += i;
+  }
+
+  memcpy(out, bufoutptr, n);
+  bufoutptr += n;
+  buffered -= n;
+  return True;
+}
+
+
+/*
+ * ReadFromRFBServerPeek hands back a pointer into the read buffer instead of
+ * copying data out, so the zlib decoders can inflate straight from it.  *len
+ * comes back with what is available, never more than max and never zero.
+ * The caller then reports what it actually used to ReadFromRFBServerSkip;
+ * anything left stays buffered.  The data is valid until the next read.
+ */
+
+Bool
+ReadFromRFBServerPeek(char **ptr, unsigned int max, unsigned int *len)
+{
+  while (buffered == 0) {
+    int i;
+
+    bufoutptr = buf;
+    i = ReadSock(buf, BUF_SIZE);
+    if (i < 0)
+      return False;
+    buffered = i;
+  }
+
+  *ptr = bufoutptr;
+  *len = (buffered < max) ? buffered : max;
+  return True;
+}
+
+void
+ReadFromRFBServerSkip(unsigned int n)
+{
+  STATS(vncStats.streamIn += n);
+  bufoutptr += n;
+  buffered -= n;
 }
 
 

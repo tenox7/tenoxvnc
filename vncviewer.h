@@ -519,6 +519,9 @@ extern void ShmCleanup();
 extern Bool errorMessageOnReadFailure;
 
 extern Bool ReadFromRFBServer(char *out, unsigned int n);
+extern Bool ReadFromRFBServerPeek(char **ptr, unsigned int max,
+				  unsigned int *len);
+extern void ReadFromRFBServerSkip(unsigned int n);
 extern Bool WriteExact(int sock, char *buf, int n);
 extern int FindFreeTcpPort(void);
 extern int ListenAtTcpPort(int port);

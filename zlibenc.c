@@ -83,7 +83,7 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
   STATS(vncStats.zlibOut += (double)rw * rh * (BPP / 8));
 
   /* Need to initialize the decompressor state. */
-  decompStream.next_in   = ( Bytef * )buffer;
+  decompStream.next_in   = Z_NULL;
   decompStream.avail_in  = 0;
   decompStream.next_out  = ( Bytef * )raw_buffer;
   decompStream.avail_out = raw_buffer_size;
@@ -102,6 +102,10 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
       return False;
     }
 
+    /* The RFB stream is framed and TCP already checksums it, so skip the
+       adler32 zlib would otherwise run over every decompressed byte. */
+    inflateValidate( &decompStream, 0 );
+
     decompStreamInited = True;
 
   }
@@ -113,20 +117,16 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
    */
   while (( remaining > 0 ) &&
          ( inflateResult == Z_OK )) {
-  
-    if ( remaining > BUFFER_SIZE ) {
-      toRead = BUFFER_SIZE;
-    }
-    else {
-      toRead = remaining;
-    }
 
-    /* Fill the buffer, obtaining data from the server. */
-    if (!ReadFromRFBServer(buffer,toRead))
+    char *inPtr;
+    unsigned int inLen;
+
+    /* Inflate straight out of the socket buffer, no staging copy. */
+    if (!ReadFromRFBServerPeek(&inPtr, (unsigned int)remaining, &inLen))
       return False;
 
-    decompStream.next_in  = ( Bytef * )buffer;
-    decompStream.avail_in = toRead;
+    decompStream.next_in  = ( Bytef * )inPtr;
+    decompStream.avail_in = inLen;
 
     /* Need to uncompress buffer full. */
     inflateResult = inflate( &decompStream, Z_SYNC_FLUSH );
@@ -153,6 +153,12 @@ HandleZlibBPP (int rx, int ry, int rw, int rh)
       return False;
     }
 
+    toRead = (int)(inLen - decompStream.avail_in);
+    if ( toRead <= 0 ) {
+      fprintf(stderr,"zlib inflate made no progress!\n");
+      return False;
+    }
+    ReadFromRFBServerSkip((unsigned int)toRead);
     remaining -= toRead;
 
   } /* while ( remaining > 0 ) */

@@ -243,6 +243,9 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 	fprintf(stderr, "InflateInit error: %s.\n", zs->msg);
       return False;
     }
+    /* The RFB stream is framed and TCP already checksums it, so skip the
+       adler32 zlib would otherwise run over every decompressed byte. */
+    inflateValidate(zs, 0);
     zlibStreamActive[stream_id] = True;
   }
 
@@ -260,18 +263,16 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
   extraBytes = 0;
 
   while (compressedLen > 0) {
-    if (compressedLen > ZLIB_BUFFER_SIZE)
-      portionLen = ZLIB_BUFFER_SIZE;
-    else
-      portionLen = compressedLen;
+    char *inPtr;
+    unsigned int inLen;
 
-    if (!ReadFromRFBServer((char*)zlib_buffer, portionLen))
+    /* Inflate straight out of the socket buffer: no copy, and inflate sees
+       as much input at once as has arrived instead of a fixed small slice. */
+    if (!ReadFromRFBServerPeek(&inPtr, (unsigned int)compressedLen, &inLen))
       return False;
 
-    compressedLen -= portionLen;
-
-    zs->next_in = (Bytef *)zlib_buffer;
-    zs->avail_in = portionLen;
+    zs->next_in = (Bytef *)inPtr;
+    zs->avail_in = inLen;
 
     do {
       zs->next_out = (Bytef *)&buffer[extraBytes];
@@ -301,6 +302,14 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
       rowsProcessed += numRows;
     }
     while (zs->avail_out == 0);
+
+    portionLen = (int)(inLen - zs->avail_in);
+    if (portionLen <= 0) {
+      fprintf(stderr, "Inflate made no progress.\n");
+      return False;
+    }
+    ReadFromRFBServerSkip((unsigned int)portionLen);
+    compressedLen -= portionLen;
   }
 
   if (rowsProcessed != rh) {
