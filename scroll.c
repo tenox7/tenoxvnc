@@ -44,6 +44,7 @@ static GC sbGC = NULL;
 static unsigned long troughPixel, thumbPixel, edgePixel;
 static int dragging = 0;		/* 1 vertical, 2 horizontal */
 
+static void ScrollRepaint(void);
 static void ScrollLayout(void);
 static void ScrollDrawBars(void);
 static void ScrollToPointer(int x, int y);
@@ -146,6 +147,7 @@ ScrollTo(int x, int y)
   scrollX = x;
   scrollY = y;
   XtMoveWidget(desktop, -scrollX, -scrollY);
+  ScrollRepaint();
   ScrollDrawBars();
 }
 
@@ -223,6 +225,20 @@ ScrollLayout(void)
 
   XtConfigureWidget(viewport, clipX, clipY, clipW, clipH, 0);
   XtMoveWidget(desktop, -scrollX, -scrollY);
+  ScrollRepaint();
+}
+
+
+/*
+ * ScrollRepaint - the blit path clips rectangles to the visible area, so
+ * whatever scrolls into view has to be put from the image now.
+ */
+
+static void
+ScrollRepaint(void)
+{
+  if (clipW > 0 && clipH > 0)
+    PutImageRect(scrollX, scrollY, clipW, clipH);
 }
 
 

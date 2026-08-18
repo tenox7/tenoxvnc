@@ -755,6 +755,29 @@ CopyDataToImage(char *buf, int x, int y, int width, int height)
 void
 PutImageRect(int x, int y, int width, int height)
 {
+  int vx, vy, vw, vh;
+
+  if (image == NULL)
+    return;
+
+  /* The desktop widget is larger than the viewport whenever the remote
+     desktop does not fit, and the server throws away whatever falls outside.
+     Clip to the visible area instead of shipping those pixels.  The image
+     still holds the whole framebuffer, so ScrollRepaint() can put back
+     whatever scrolls into view later. */
+
+  ScrollGetPos(&vx, &vy);
+  ScrollGetVisible(&vw, &vh);
+
+  if (vw > 0 && vh > 0) {
+    if (x < vx) { width -= vx - x; x = vx; }
+    if (y < vy) { height -= vy - y; y = vy; }
+    if (x + width > vx + vw) width = vx + vw - x;
+    if (y + height > vy + vh) height = vy + vh - y;
+    if (width <= 0 || height <= 0)
+      return;
+  }
+
 #ifdef MITSHM
   if (appData.useShm) {
     STATS(vncStats.shmPutImages++);
