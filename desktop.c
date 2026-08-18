@@ -714,11 +714,15 @@ CursorForMode(void)
 
 
 /*
- * CopyDataToScreen.
+ * CopyDataToImage puts pixels into the local framebuffer image without
+ * telling X about them, PutImageRect issues the X request.  Decoders that
+ * produce a rectangle in pieces - ZRLE tile by tile, Tight band by band -
+ * blit each piece and then send one request for the whole rectangle, rather
+ * than one request per piece.
  */
 
 void
-CopyDataToScreen(char *buf, int x, int y, int width, int height)
+CopyDataToImage(char *buf, int x, int y, int width, int height)
 {
   if (appData.rawDelay != 0) {
     XFillRectangle(dpy, desktopWin, gc, x, y, width, height);
@@ -746,7 +750,11 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
   }
 
   STATS(vncStats.blitPixels += (double)width * height);
+}
 
+void
+PutImageRect(int x, int y, int width, int height)
+{
 #ifdef MITSHM
   if (appData.useShm) {
     STATS(vncStats.shmPutImages++);
@@ -756,6 +764,13 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
 #endif
   STATS(vncStats.putImages++);
   XPutImage(dpy, desktopWin, gc, image, x, y, x, y, width, height);
+}
+
+void
+CopyDataToScreen(char *buf, int x, int y, int width, int height)
+{
+  CopyDataToImage(buf, x, y, width, height);
+  PutImageRect(x, y, width, height);
 }
 
 

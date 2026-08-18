@@ -212,6 +212,8 @@ extern void DesktopInitAfterRealization();
 extern void SendRFBEvent(Widget w, XEvent *event, String *params,
 			 Cardinal *num_params);
 extern void CopyDataToScreen(char *buf, int x, int y, int width, int height);
+extern void CopyDataToImage(char *buf, int x, int y, int width, int height);
+extern void PutImageRect(int x, int y, int width, int height);
 extern void RepaintScreen(Widget w, XEvent *event, String *params,
 			  Cardinal *num_params);
 extern void CycleLocalCursor(Widget w, XEvent *event, String *params,

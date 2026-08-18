@@ -95,6 +95,7 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
   filterPtrBPP filterFn;
   z_streamp zs;
   char *buffer2;
+  Bool directCopy;
   int err, stream_id, compressedLen, bitsPixel;
   int bufferSize, rowSize, numRows, portionLen, rowsProcessed, extraBytes;
 
@@ -207,6 +208,14 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
     return False;
   }
 
+  /* FilterCopy without pixel conversion only memcpys the inflate buffer into
+     buffer2, so in that case blit out of the inflate buffer and skip it. */
+  directCopy = (filterFn == FilterCopyBPP);
+#if BPP == 32
+  if (cutZeros)
+    directCopy = False;
+#endif
+
   /* Determine if the data should be decompressed or just copied. */
   rowSize = (rw * bitsPixel + 7) / 8;
   if (rh * rowSize < TIGHT_MIN_TO_COMPRESS) {
@@ -292,13 +301,17 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 
       numRows = (bufferSize - zs->avail_out) / rowSize;
 
-      filterFn(numRows, (CARDBPP *)buffer2);
+      if (directCopy) {
+	CopyDataToImage(buffer, rx, ry + rowsProcessed, rw, numRows);
+      } else {
+	filterFn(numRows, (CARDBPP *)buffer2);
+	CopyDataToImage(buffer2, rx, ry + rowsProcessed, rw, numRows);
+      }
 
       extraBytes = bufferSize - zs->avail_out - numRows * rowSize;
       if (extraBytes > 0)
 	memcpy(buffer, &buffer[numRows * rowSize], extraBytes);
 
-      CopyDataToScreen(buffer2, rx, ry + rowsProcessed, rw, numRows);
       rowsProcessed += numRows;
     }
     while (zs->avail_out == 0);
@@ -316,6 +329,8 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
     fprintf(stderr, "Incorrect number of scan lines after decompression.\n");
     return False;
   }
+
+  PutImageRect(rx, ry, rw, rh);
 
   return True;
 }

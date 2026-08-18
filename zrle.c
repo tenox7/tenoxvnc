@@ -318,9 +318,11 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 	return False;
       }
 
-      CopyDataToScreen((char *)zrleTile, rx + tx, ry + ty, tw, th);
+      CopyDataToImage((char *)zrleTile, rx + tx, ry + ty, tw, th);
     }
   }
+
+  PutImageRect(rx, ry, rw, rh);
 
   return True;
 
