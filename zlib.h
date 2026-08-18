@@ -2541,11 +2541,12 @@ typedef unsigned long  ulg;
 
 #if !defined(Z_U8) && !defined(Z_SOLO) && defined(STDC)
 #  include <limits.h>
-#  if (ULONG_MAX == 0xffffffffffffffff)
+   /* shifted, not a 64-bit literal: a C89 cpp evaluates #if in 32 bits */
+#  if ((ULONG_MAX >> 31) >> 31) >> 1 == 1
 #    define Z_U8 unsigned long
-#  elif (ULLONG_MAX == 0xffffffffffffffff)
+#  elif defined(ULLONG_MAX) && ((ULLONG_MAX >> 31) >> 31) >> 1 == 1
 #    define Z_U8 unsigned long long
-#  elif (UINT_MAX == 0xffffffffffffffff)
+#  elif ((UINT_MAX >> 31) >> 31) >> 1 == 1
 #    define Z_U8 unsigned
 #  endif
 #endif

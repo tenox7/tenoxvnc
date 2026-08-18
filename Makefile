@@ -32,7 +32,7 @@ all:
 	  HP-UX)   case "$$r" in \
 	             *.09.*) t=hpux9;; \
 	             *.10.*) t=hpux10;; \
-	             *.11.31*) case "$$m" in ia64) t=hpux1131ia64;; *) t=hpux11;; esac;; \
+	             *.11.31*) case "$$m" in ia64) t=hpux1131ia64;; *) t=hpux1131;; esac;; \
 	             *) t=hpux11;; \
 	           esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix53;; *) t=irix65;; esac;; \
@@ -104,6 +104,13 @@ hpux11:
 	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="$(HPUX11_XLIBS) -lm" $(TARGET)
 
+# 11.31 on PA-RISC 2.0. Unlike 11i v1 this one does ship libFOO.sl aliases, so
+# plain -l works; no gcc here, the bundled ANSI cc is /opt/ansic/bin/cc.
+hpux1131:
+	$(MAKE) CC=/opt/ansic/bin/cc \
+	  CFLAGS="-Ae +O3 +DA2.0 +DS2.0 $(INCS) -DMITSHM $(STATS)" \
+	  LDFLAGS="-L/usr/lib/X11R6 -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
+
 # 11.31 on Itanium; 11.31 also runs on PA-RISC, hence both are matched above.
 # /usr/lib and /usr/lib/X11R6 are PA-RISC SOM: "Mismatched ABI (not an ELF
 # file)". The ELF libs are in /usr/lib/hpux32, the aCC default. No gcc here.
@@ -169,4 +176,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1131 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd
