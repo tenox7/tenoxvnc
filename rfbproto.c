@@ -821,6 +821,8 @@ SetFormatAndEncodings()
 	encs[se->nEncodings++] = Swap32IfLE(rfbEncodingHextile);
       } else if (strncasecmp(encStr,"zrle",encStrLen) == 0) {
 	encs[se->nEncodings++] = Swap32IfLE(rfbEncodingZRLE);
+	if (appData.compressLevel >= 0 && appData.compressLevel <= 9)
+	  requestCompressLevel = True;
       } else if (strncasecmp(encStr,"zlib",encStrLen) == 0) {
 	encs[se->nEncodings++] = Swap32IfLE(rfbEncodingZlib);
 	if (appData.compressLevel >= 0 && appData.compressLevel <= 9)
