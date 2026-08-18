@@ -320,9 +320,14 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 
       CopyDataToImage((char *)zrleTile, rx + tx, ry + ty, tw, th);
     }
-  }
 
-  PutImageRect(rx, ry, rw, rh);
+    /* One request per row of tiles rather than per tile.  The small
+       rectangles that dominate are a single row, so this costs the same as
+       one request for the whole rectangle, while a tall rectangle still
+       paints as it decodes instead of arriving in one late jump. */
+
+    PutImageRect(rx, ry + ty, rw, th);
+  }
 
   return True;
 

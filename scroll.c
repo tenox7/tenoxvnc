@@ -231,14 +231,41 @@ ScrollLayout(void)
 
 /*
  * ScrollRepaint - the blit path clips rectangles to the visible area, so
- * whatever scrolls into view has to be put from the image now.
+ * whatever just scrolled into view has to be put from the image now.
+ *
+ * Only the newly exposed strips are sent, never the whole viewport: a
+ * scrollbar drag calls this on every motion event, and anything that was
+ * already on screen was put when it was decoded.
  */
+
+static int putX = 0, putY = 0, putW = 0, putH = 0;   /* viewport last put */
 
 static void
 ScrollRepaint(void)
 {
-  if (clipW > 0 && clipH > 0)
-    PutImageRect(scrollX, scrollY, clipW, clipH);
+  if (clipW <= 0 || clipH <= 0)
+    return;
+
+  if (putW <= 0 || scrollX >= putX + putW || scrollY >= putY + putH ||
+      scrollX + clipW <= putX || scrollY + clipH <= putY) {
+    PutImageRect(scrollX, scrollY, clipW, clipH);	/* nothing in common */
+  } else {
+    if (scrollY < putY)
+      PutImageRect(scrollX, scrollY, clipW, putY - scrollY);
+    if (scrollY + clipH > putY + putH)
+      PutImageRect(scrollX, putY + putH, clipW,
+		   scrollY + clipH - (putY + putH));
+    if (scrollX < putX)
+      PutImageRect(scrollX, scrollY, putX - scrollX, clipH);
+    if (scrollX + clipW > putX + putW)
+      PutImageRect(putX + putW, scrollY, scrollX + clipW - (putX + putW),
+		   clipH);
+  }
+
+  putX = scrollX;
+  putY = scrollY;
+  putW = clipW;
+  putH = clipH;
 }
 
 

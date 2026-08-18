@@ -307,6 +307,7 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
 	filterFn(numRows, (CARDBPP *)buffer2);
 	CopyDataToImage(buffer2, rx, ry + rowsProcessed, rw, numRows);
       }
+      PutImageRect(rx, ry + rowsProcessed, rw, numRows);
 
       extraBytes = bufferSize - zs->avail_out - numRows * rowSize;
       if (extraBytes > 0)
@@ -329,8 +330,6 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
     fprintf(stderr, "Incorrect number of scan lines after decompression.\n");
     return False;
   }
-
-  PutImageRect(rx, ry, rw, rh);
 
   return True;
 }

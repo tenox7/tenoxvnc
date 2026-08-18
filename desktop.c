@@ -757,7 +757,7 @@ PutImageRect(int x, int y, int width, int height)
 {
   int vx, vy, vw, vh;
 
-  if (image == NULL)
+  if (image == NULL || width <= 0 || height <= 0)
     return;
 
   /* The desktop widget is larger than the viewport whenever the remote
