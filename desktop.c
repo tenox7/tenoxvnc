@@ -48,7 +48,10 @@ static int cursorMode = CURSOR_DOT;
 static Cursor CreateDotCursor();
 static Cursor CursorForMode(void);
 static void CreateDesktopImage(void);
-static void CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width,int height);
+static void BlitToImage(XImage *img, char *buf, int x, int y, int width,
+			int height);
+static void CopyBGR233ToImage(XImage *img, CARD8 *buf, int x, int y,
+			      int width, int height);
 static void HandleBasicDesktopEvent(Widget w, XtPointer ptr, XEvent *ev,
 				    Boolean *cont);
 static void HandleToplevelConfigure(Widget w, XtPointer ptr, XEvent *ev,
@@ -714,6 +717,39 @@ CursorForMode(void)
 
 
 /*
+ * BlitToImage translates a rectangle of server format pixels into an XImage
+ * in the local visual's format.  The framebuffer goes through
+ * CopyDataToImage(), the cursor shape through CreateLocalImage().
+ */
+
+static void
+BlitToImage(XImage *img, char *buf, int x, int y, int width, int height)
+{
+  if (!useColorMap) {
+    int h;
+    int widthInBytes = width * myFormat.bitsPerPixel / 8;
+    int scrWidthInBytes = img->bytes_per_line;
+
+    char *scr = (img->data + y * scrWidthInBytes
+		 + x * myFormat.bitsPerPixel / 8);
+
+    /* A full width rectangle is contiguous in the image, so it goes in one
+       move instead of one per scan line. */
+    if (widthInBytes == scrWidthInBytes) {
+      memcpy(scr, buf, (size_t)widthInBytes * height);
+    } else {
+      for (h = 0; h < height; h++) {
+	memcpy(scr, buf, widthInBytes);
+	buf += widthInBytes;
+	scr += scrWidthInBytes;
+      }
+    }
+  } else {
+    CopyBGR233ToImage(img, (CARD8 *)buf, x, y, width, height);
+  }
+}
+
+/*
  * CopyDataToImage puts pixels into the local framebuffer image without
  * telling X about them, PutImageRect issues the X request.  Decoders that
  * produce a rectangle in pieces - ZRLE tile by tile, Tight band by band -
@@ -732,30 +768,36 @@ CopyDataToImage(char *buf, int x, int y, int width, int height)
     Msleep(appData.rawDelay);
   }
 
-  if (!useColorMap) {
-    int h;
-    int widthInBytes = width * myFormat.bitsPerPixel / 8;
-    int scrWidthInBytes = image->bytes_per_line;
-
-    char *scr = (image->data + y * scrWidthInBytes
-		 + x * myFormat.bitsPerPixel / 8);
-
-    /* A full width rectangle is contiguous in the image, so it goes in one
-       move instead of one per scan line. */
-    if (widthInBytes == scrWidthInBytes) {
-      memcpy(scr, buf, (size_t)widthInBytes * height);
-    } else {
-      for (h = 0; h < height; h++) {
-	memcpy(scr, buf, widthInBytes);
-	buf += widthInBytes;
-	scr += scrWidthInBytes;
-      }
-    }
-  } else {
-    CopyBGR233ToScreen((CARD8 *)buf, x, y, width, height);
-  }
+  BlitToImage(image, buf, x, y, width, height);
 
   STATS(vncStats.blitPixels += (double)width * height);
+}
+
+
+/*
+ * CreateLocalImage builds a standalone XImage in the local visual's format
+ * out of a rectangle of server format pixels.  cursor.c fills the cursor
+ * pixmap through it, so that drawing the cursor is a copy on the X server
+ * rather than a conversion here.
+ */
+
+XImage *
+CreateLocalImage(char *buf, int width, int height)
+{
+  XImage *img = XCreateImage(dpy, vis, visdepth, ZPixmap, 0, NULL,
+			     width, height, BitmapPad(dpy), 0);
+
+  if (!img)
+    return NULL;
+
+  img->data = malloc(img->bytes_per_line * img->height);
+  if (!img->data) {
+    XDestroyImage(img);
+    return NULL;
+  }
+
+  BlitToImage(img, buf, 0, 0, width, height);
+  return img;
 }
 
 void
@@ -836,19 +878,19 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
   }
 
 static void
-CopyBGR233ToScreen(CARD8 *buf, int x, int y, int width, int height)
+CopyBGR233ToImage(XImage *img, CARD8 *buf, int x, int y, int width, int height)
 {
   int p, q;
   int xoff = 7 - (x & 7);
   int xcur;
   /* row stride comes from the XImage - scanlines are padded, so it is not
      necessarily framebufferWidth * bpp / 8 */
-  int fbwb = image->bytes_per_line;
-  CARD8 *scr1 = ((CARD8 *)image->data) + y * fbwb + x / 8;
+  int fbwb = img->bytes_per_line;
+  CARD8 *scr1 = ((CARD8 *)img->data) + y * fbwb + x / 8;
   CARD8 *scrt;
-  CARD8 *scr8 = ((CARD8 *)image->data) + y * image->bytes_per_line + x;
-  CARD16 *scr16 = (CARD16 *)(image->data + y * image->bytes_per_line) + x;
-  CARD32 *scr32 = (CARD32 *)(image->data + y * image->bytes_per_line) + x;
+  CARD8 *scr8 = ((CARD8 *)img->data) + y * fbwb + x;
+  CARD16 *scr16 = (CARD16 *)(img->data + y * fbwb) + x;
+  CARD32 *scr32 = (CARD32 *)(img->data + y * fbwb) + x;
 
   switch (visbpp) {
 

@@ -6,30 +6,6 @@
 - Fix jpeg fatal error handling: tight.c uses stock jpeg_std_error, whose
   error_exit calls exit(). A malformed JPEG from the server kills the viewer
   instead of dropping the rect. jpegError only catches source underruns.
-- Draw the soft cursor with a clip mask (SOFT-CURSOR below)
-
-## SOFT-CURSOR: draw it with a clip mask
-
-SoftCursorDraw() in cursor.c puts every opaque cursor pixel with its own
-XPutImage/XShmPutImage, so one cursor movement costs an X request per pixel of
-the shape, around 190 for an arrow. Inherited verbatim from TightVNC 1.3.10,
-FIXME comment included. Measured on Tru64 V5.1B: 794 ms of dispatch per motion
-event, X server at 97% while the pointer moves, viewer itself at 0.2%.
-SendPointerEvent() redraws the cursor on every local motion event, so it is
-local pointer movement that triggers it, not the server.
-
-The fix is a clip mask: build a Pixmap of the cursor and a 1-bit bitmap from
-rcMask once per shape, keep a GC carrying that clip mask, and per move do
-XSetClipOrigin plus XCopyArea. Two requests, no round trip, and the image is
-never touched. Filling the Pixmap needs the server-to-local pixel conversion
-that today only exists inside CopyDataToScreen.
-
-Do not batch it by putting the whole cursor rectangle from the local image
-instead. That was tried and it corrupts: CopyRect is handled as XCopyArea on
-the window alone (rfbproto.c), so image is not a mirror of the framebuffer and
-is stale wherever the remote desktop scrolled. Putting the transparent pixels
-from it drags a block of stale pixels around with the cursor. It also needs an
-XSync per move to keep shm safe, which cancels most of the saving.
 
 ## Further zlib and jpeg trimming
 

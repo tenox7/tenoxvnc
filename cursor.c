@@ -39,7 +39,10 @@
 
 static Bool prevSoftCursorSet = False;
 static Pixmap rcSavedArea;
-static CARD8 *rcSource, *rcMask;
+static Pixmap rcShape;		/* cursor pixels in the local visual format */
+static Pixmap rcClip;		/* 1bpp mask, the clip mask of rcGC */
+static GC rcGC = NULL;
+static CARD8 *rcSource;
 static int rcHotX, rcHotY, rcWidth, rcHeight;
 static int rcCursorX = 0, rcCursorY = 0;
 static int rcLockX, rcLockY, rcLockWidth, rcLockHeight;
@@ -169,13 +172,14 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 {
   int bytesPerPixel;
   size_t bytesPerRow, bytesMaskData;
-  size_t pixelBytes, maskBytes;
+  size_t pixelBytes;
   Drawable dr;
   rfbXCursorColors rgb;
   CARD32 colors[2];
+  XImage *shapeImage;
   char *buf;
   CARD8 *ptr;
-  int x, y, b;
+  int x, y, b, i;
 
   bytesPerPixel = myFormat.bitsPerPixel / 8;
   bytesPerRow = (width + 7) / 8;
@@ -193,8 +197,7 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
   }
 
   if (!RfbMulSize((size_t)width, (size_t)height, (size_t)bytesPerPixel,
-		  &pixelBytes) ||
-      !RfbMulSize((size_t)width, (size_t)height, 1, &maskBytes)) {
+		  &pixelBytes)) {
     fprintf(stderr, "Cursor shape pixel data size overflow\n");
     return False;
   }
@@ -276,7 +279,9 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 
   }
 
-  /* Read and decode mask data. */
+  /* Read the mask and make it the clip mask.  The wire holds the leftmost
+     pixel of a byte in the high bit, XCreateBitmapFromData wants it in the
+     low one. */
 
   if (!ReadFromRFBServer(buf, bytesMaskData)) {
     free(rcSource);
@@ -284,30 +289,37 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
     return False;
   }
 
-  rcMask = malloc(maskBytes);
-  if (rcMask == NULL) {
-    free(rcSource);
-    free(buf);
+  for (i = 0; i < (int)bytesMaskData; i++)
+    buf[i] = (char)_reverse_byte[(int)buf[i] & 0xFF];
+
+  rcClip = XCreateBitmapFromData(dpy, dr, buf, width, height);
+  free(buf);
+
+  /* Convert the pixels once, into a pixmap the server can copy from, so that
+     a cursor move is a clipped XCopyArea and not one put per opaque pixel. */
+
+  shapeImage = CreateLocalImage((char *)rcSource, width, height);
+  free(rcSource);
+  if (shapeImage == NULL) {
+    XFreePixmap(dpy, rcClip);
     return False;
   }
 
-  ptr = rcMask;
-  for (y = 0; y < height; y++) {
-    for (x = 0; x < width / 8; x++) {
-      for (b = 7; b >= 0; b--) {
-	*ptr++ = buf[y * bytesPerRow + x] >> b & 1;
-      }
-    }
-    for (b = 7; b > 7 - width % 8; b--) {
-      *ptr++ = buf[y * bytesPerRow + x] >> b & 1;
-    }
-  }
+  rcShape = XCreatePixmap(dpy, dr, width, height, visdepth);
+  XPutImage(dpy, rcShape, gc, shapeImage, 0, 0, 0, 0, width, height);
+  XDestroyImage(shapeImage);
 
-  free(buf);
+  if (rcGC == NULL) {
+    XGCValues gcv;
+
+    /* nothing listens for the NoExpose a copy would otherwise send per move */
+    gcv.graphics_exposures = False;
+    rcGC = XCreateGC(dpy, desktopWin, GCGraphicsExposures, &gcv);
+  }
+  XSetClipMask(dpy, rcGC, rcClip);
 
   /* Set remaining data associated with cursor. */
 
-  dr = DefaultRootWindow(dpy);
   rcSavedArea = XCreatePixmap(dpy, dr, width, height, visdepth);
   rcHotX = xhot;
   rcHotY = yhot;
@@ -479,39 +491,31 @@ static void SoftCursorCopyArea(int oper)
   }
 }
 
+/*
+ * SoftCursorDraw paints the cursor through the clip mask of rcGC, which is
+ * two requests whatever the shape.  The desktop window is exactly the size of
+ * the framebuffer, so the X server does the edge clipping.  Note that this
+ * leaves the local image alone: only the window carries the cursor, and
+ * SoftCursorCopyArea() takes it back off again.
+ */
+
 static void SoftCursorDraw(void)
 {
-  int x, y, x0, y0;
-  int offset, bytesPerPixel;
-  char *pos;
+  int x = rcCursorX - rcHotX;
+  int y = rcCursorY - rcHotY;
 
-  bytesPerPixel = myFormat.bitsPerPixel / 8;
-
-  /* FIXME: Speed optimization is possible. */
-  for (y = 0; y < rcHeight; y++) {
-    y0 = rcCursorY - rcHotY + y;
-    if (y0 >= 0 && y0 < si.framebufferHeight) {
-      for (x = 0; x < rcWidth; x++) {
-	x0 = rcCursorX - rcHotX + x;
-	if (x0 >= 0 && x0 < si.framebufferWidth) {
-	  offset = y * rcWidth + x;
-	  if (rcMask[offset]) {
-	    pos = (char *)&rcSource[offset * bytesPerPixel];
-	    CopyDataToScreen(pos, x0, y0, 1, 1);
-	  }
-	}
-      }
-    }
-  }
+  XSetClipOrigin(dpy, rcGC, x, y);
+  XCopyArea(dpy, rcShape, desktopWin, rcGC, 0, 0, rcWidth, rcHeight, x, y);
 }
 
 static void FreeSoftCursor(void)
 {
   if (prevSoftCursorSet) {
     SoftCursorCopyArea(OPER_RESTORE);
+    XSetClipMask(dpy, rcGC, None);
     XFreePixmap(dpy, rcSavedArea);
-    free(rcSource);
-    free(rcMask);
+    XFreePixmap(dpy, rcShape);
+    XFreePixmap(dpy, rcClip);
     prevSoftCursorSet = False;
   }
 }
