@@ -426,6 +426,11 @@ void SoftCursorUnlockScreen(void)
 
 void SoftCursorMove(int x, int y)
 {
+  /* Button events, and every motion event a warp or a pointer that has not
+     left its pixel produces, ask for the position we are already drawn at. */
+  if (prevSoftCursorSet && !rcCursorHidden && x == rcCursorX && y == rcCursorY)
+    return;
+
   if (prevSoftCursorSet && !rcCursorHidden) {
     SoftCursorCopyArea(OPER_RESTORE);
     rcCursorHidden = True;
@@ -480,10 +485,7 @@ static void SoftCursorCopyArea(int oper)
 
   if (oper == OPER_SAVE) {
     /* Save screen area in memory. */
-#ifdef MITSHM
-    if (appData.useShm)
-      XSync(dpy, False);
-#endif
+    SyncShmPuts();
     XCopyArea(dpy, desktopWin, rcSavedArea, gc, x, y, w, h, 0, 0);
   } else {
     /* Restore screen area. */

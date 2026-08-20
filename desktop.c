@@ -37,6 +37,9 @@ static Bool modifierPressed[256];
 
 static XImage *image = NULL;
 static Bool imageIsShm = False;
+#ifdef MITSHM
+static Bool shmPutPending = False;	/* server may still be reading image */
+#endif
 
 static XtIntervalId resizeTimer = 0;
 static int wantResizeWidth, wantResizeHeight;
@@ -154,6 +157,8 @@ CreateDesktopImage(void)
   imageIsShm = False;
 
 #ifdef MITSHM
+  shmPutPending = False;
+
   if (appData.useShm) {
     image = CreateShmImage();
     if (!image)
@@ -830,11 +835,34 @@ PutImageRect(int x, int y, int width, int height)
   if (appData.useShm) {
     STATS(vncStats.shmPutImages++);
     XShmPutImage(dpy, desktopWin, gc, image, x, y, x, y, width, height, False);
+    shmPutPending = True;
     return;
   }
 #endif
   STATS(vncStats.putImages++);
   XPutImage(dpy, desktopWin, gc, image, x, y, x, y, width, height);
+}
+
+
+/*
+ * SyncShmPuts waits for the X server to finish reading the shared image.  A
+ * put made with send_event False says nothing about when the server is done
+ * with the memory, so anything that goes on to overwrite image->data, or to
+ * read the window back expecting the put to have landed, has to wait here
+ * first.  Requests already issued are ordered, so the wait is only owed once
+ * per put and not once per caller.
+ */
+
+void
+SyncShmPuts(void)
+{
+#ifdef MITSHM
+  if (!shmPutPending)
+    return;
+
+  XSync(dpy, False);
+  shmPutPending = False;
+#endif
 }
 
 void
