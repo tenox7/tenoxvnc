@@ -283,8 +283,10 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 
       if (subenc == 0) {
 	/* raw pixels */
-	for (i = 0; i < npixels; i++)
-	  ZRLE_CPIXEL(&zrleTile[i * bytesPP]);
+	CARD8 *t = zrleTile;
+
+	for (i = 0; i < npixels; i++, t += bytesPP)
+	  ZRLE_CPIXEL(t);
 
       } else if (subenc == 1) {
 	/* solid color tile */
@@ -302,10 +304,16 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 
 	bppal = (psize > 4) ? 4 : ((psize > 2) ? 2 : 1);
 
+	/* walked with a pointer: the indexed form cost two multiplies per
+	   pixel and no compiler may hoist them, since the tile and the
+	   palette are both CARD8 * and so alias by definition */
+
 	for (y = 0; y < th; y++) {
+	  CARD8 *t = zrleTile + y * tw * bytesPP;
+
 	  nbits = 0;
 	  b = 0;
-	  for (x = 0; x < tw; x++) {
+	  for (x = 0; x < tw; x++, t += bytesPP) {
 	    if (nbits == 0) {
 	      if (p >= end) goto corrupt;
 	      b = *p++;
@@ -314,7 +322,7 @@ HandleZRLE(int rx, int ry, int rw, int rh)
 	    nbits -= bppal;
 	    i = (b >> nbits) & ((1 << bppal) - 1);
 	    if (i >= psize) goto corrupt;
-	    ZRLE_PUT(&zrleTile[(y * tw + x) * bytesPP], &palette[i * 4]);
+	    ZRLE_PUT(t, &palette[i * 4]);
 	  }
 	}
 
