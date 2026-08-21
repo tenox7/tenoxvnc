@@ -32,3 +32,21 @@
   clang only: above a 25.2 MB empty-TU floor jpeg.c costs 42.0 MB against
   jdmarker.c's 25.8 MB, so the working set grows about 1.6x over the worst
   single module rather than with the module count.
+
+## Performance, non-JPEG
+
+What is left after the pass that moved the decoders into the local image.
+
+- ZRLE and Tight still decode into a scratch buffer and then copy that into
+  the image (zrle.c CopyDataToImage per tile, tight.c per band). Raw no
+  longer does. Writing at the image's stride would save a pass over every
+  pixel, but only for a full-color session: the default reduced format has
+  to go through colorToPixel[] anyway, so the scratch buffer earns its keep
+  there. In ZRLE it also means the RLE runs have to wrap at the tile edge,
+  which is where ZrleFill gets its speed.
+
+- rfbproto.o has no dependency on the files rfbproto.c #includes, so editing
+  hextile.c, rre.c, corre.c, tight.c or zrle.c does not rebuild it. Every
+  measurement or test after such an edit silently runs the old code unless
+  the tree is built from clean. A POSIX-portable fix is to list them as
+  prerequisites of rfbproto.o.

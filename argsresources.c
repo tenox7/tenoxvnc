@@ -25,6 +25,18 @@
 #include "vncviewer.h"
 
 /*
+ * A remote cursor shape with no more than two colors can be handed to the X
+ * server, which then draws it for free.  Build with HWCURSOR=false to have
+ * that start off; the F8 menu switches it either way at any time.
+ */
+
+#ifdef NO_HW_CURSOR
+#define HW_CURSOR_DEFAULT False
+#else
+#define HW_CURSOR_DEFAULT True
+#endif
+
+/*
  * fallback_resources - these are used if there is no app-defaults file
  * installed in one of the standard places.
  */
@@ -186,6 +198,10 @@ static XtResource appDataResourceList[] = {
   {"useX11Cursor", "UseX11Cursor", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, useX11Cursor), XtRImmediate, (XtPointer) False},
 
+  {"useHardwareCursor", "UseHardwareCursor", XtRBool, sizeof(Bool),
+   XtOffsetOf(AppData, useHwCursor), XtRImmediate,
+   (XtPointer) HW_CURSOR_DEFAULT},
+
   {"localCursor", "LocalCursor", XtRString, sizeof(String),
    XtOffsetOf(AppData, localCursor), XtRImmediate, (XtPointer) "dot"},
 
@@ -233,6 +249,8 @@ XrmOptionDescRec cmdLineOptions[] = {
   {"-nojpeg",        "*enableJPEG",         XrmoptionNoArg,  "False"},
   {"-nocursorshape", "*useRemoteCursor",    XrmoptionNoArg,  "False"},
   {"-x11cursor",     "*useX11Cursor",       XrmoptionNoArg,  "True"},
+  {"-hwcursor",      "*useHardwareCursor",  XrmoptionNoArg,  "True"},
+  {"-nohwcursor",    "*useHardwareCursor",  XrmoptionNoArg,  "False"},
   {"-cursor",        "*localCursor",        XrmoptionSepArg, 0},
   {"-autopass",      "*autoPass",           XrmoptionNoArg,  "True"},
   {"-remoteresize",  "*remoteResize",       XrmoptionNoArg,  "True"},
@@ -262,6 +280,7 @@ static XtActionsRec actions[] = {
     {"SetContinuousUpdatesState", SetContinuousUpdatesState},
     {"RepaintScreen", RepaintScreen},
     {"CycleLocalCursor", CycleLocalCursor},
+    {"ToggleHardwareCursor", ToggleHardwareCursor},
     {"SetLocalCursorState", SetLocalCursorState},
 #ifdef VNCSTATS
     {"ShowStats", ShowStats},
@@ -377,6 +396,7 @@ usage(void)
 	  "        -nojpeg\n"
 	  "        -nocursorshape\n"
 	  "        -x11cursor\n"
+	  "        -hwcursor | -nohwcursor (X server draws 2-color remote cursors)\n"
 	  "        -cursor dot|arrow|none (local cursor shown over the desktop)\n"
 	  "        -autopass\n"
 	  "        -noremoteresize (don't resize remote desktop to fit window)\n"

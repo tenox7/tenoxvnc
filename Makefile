@@ -2,11 +2,14 @@
 
 CC = gcc
 INCS = -I.
-CFLAGS = -O2 $(INCS) -DMITSHM $(STATS)
+CFLAGS = -O2 $(INCS) -DMITSHM $(DEFS)
 LDFLAGS = -lXt -lXext -lX11 -lm
 TARGET = tenoxvnc
-# Diag under F8 Menu. Off unless VNCSTATS=true make <target>
-STATS = $(VNCSTATS:true=-DVNCSTATS)
+# Compile-time switches:
+#   VNCSTATS=true    diagnostics page under the F8 menu, off by default
+#   HWCURSOR=false   never let the X server draw the remote cursor; the F8
+#                    menu switches it either way at run time regardless
+DEFS = $(VNCSTATS:true=-DVNCSTATS) $(HWCURSOR:false=-DNO_HW_CURSOR)
 
 VIEWER_SRCS = argsresources.c caps.c color.c cursor.c desktop.c dialogs.c \
 	fullscreen.c listen.c misc.c popup.c rfbproto.c selection.c shm.c \
@@ -33,6 +36,7 @@ all:
 	             *.09.*) t=hpux9;; \
 	             *.10.*) t=hpux10;; \
 	             *.11.31*) case "$$m" in ia64) t=hpux1131ia64;; *) t=hpux1131;; esac;; \
+	             *.11.2*) t=hpux1120;; \
 	             *) t=hpux11;; \
 	           esac;; \
 	  IRIX*)   case "$$r" in 5.*) t=irix53;; *) t=irix65;; esac;; \
@@ -66,20 +70,20 @@ version:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 linux:
-	$(MAKE) VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 macos:
-	$(MAKE) VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM -I/opt/X11/include $(STATS)" \
+	$(MAKE) VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM -I/opt/X11/include $(DEFS)" \
 	  LDFLAGS="-L/opt/X11/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 solaris:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
+	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(DEFS)" \
 	  LDFLAGS="-L/usr/openwin/lib -R/usr/openwin/lib -lXt -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
 # OpenWindows 3 is X11R4. Sockets are in libc and ld records -L for ld.so.
 sunos4:
-	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
+	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(DEFS)" \
 	  LDFLAGS="-L/usr/openwin/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 # All HP-UX targets need gmake and build with the bundled HP ANSI C compiler,
@@ -88,12 +92,12 @@ HPUX_CC = /opt/ansic/bin/cc
 
 # hpux9 uses X11R5 which has no XShm headers.
 hpux9:
-	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(STATS)" \
+	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(DEFS)" \
 	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 # On 10.20 Xt is a static archive in /usr/contrib, hence explicit -lSM -lICE.
 hpux10:
-	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
+	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(DEFS)" \
 	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
 # 11i keeps all X11 headers in /usr/include/X11 and ships the shared libs only
@@ -104,14 +108,21 @@ HPUX11_XLIBS = $(HPUX11_X11)/libXt.3 $(HPUX11_X11)/libSM.2 $(HPUX11_X11)/libICE.
   $(HPUX11_X11)/libXext.3 $(HPUX11_X11)/libX11.3
 
 hpux11:
-	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae +O3 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae +O3 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="$(HPUX11_XLIBS) -lm" $(TARGET)
+
+# 11i v1.5/v2 (11.20-11.23). Same /usr/lib/X11R6 layout with .sl aliases as
+# 11.31 PA-RISC.
+hpux1120:
+	$(MAKE) CC=$(HPUX_CC) \
+	  CFLAGS="-Ae +O3 $(INCS) -DMITSHM $(DEFS)" \
+	  LDFLAGS="-L/usr/lib/X11R6 -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
 # 11.31 on PA-RISC 2.0. Unlike 11i v1 this one does ship libFOO.sl aliases, so
 # plain -l works.
 hpux1131:
 	$(MAKE) CC=$(HPUX_CC) \
-	  CFLAGS="-Ae +O3 +DA2.0 +DS2.0 $(INCS) -DMITSHM $(STATS)" \
+	  CFLAGS="-Ae +O3 +DA2.0 +DS2.0 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-L/usr/lib/X11R6 -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
 # 11.31 on Itanium; 11.31 also runs on PA-RISC, hence both are matched above.
@@ -119,41 +130,41 @@ hpux1131:
 # file)". The ELF libs are in /usr/lib/hpux32, the aCC default. No gcc here.
 hpux1131ia64:
 	$(MAKE) CC=/opt/ansic/bin/aCC \
-	  CFLAGS="-Ae +O3 +DSitanium2 $(INCS) -DMITSHM $(STATS)" \
+	  CFLAGS="-Ae +O3 +DSitanium2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-L/usr/lib/hpux32 -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
 aix:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 # libXt.so pulls in the Smc*/Ice* session-management calls but does not record
 # a dependency on them, so -lSM -lICE have to be named explicitly.
 unixware:
-	$(MAKE) CC=/usr/ccs/bin/cc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=/usr/ccs/bin/cc CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lSM -lICE -lXext -lX11 -lm -lsocket -lnsl" $(TARGET)
 
 # OpenServer 5 and 6 both report uname -s SCO_SV, only uname -v distinguishes
 # them (5.0.7 vs 6.0.0). On 6 the X11 tree moved to /usr/X11R6.
 osr5:
-	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
 osr6:
-	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O -I/usr/X11R6/include $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O -I/usr/X11R6/include $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-L/usr/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
 osf1:
-	$(MAKE) CC=cc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=cc CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 # MIPSpro cc, -woff mutes unused-variable warnings. mips3 runs on any 6.5 box,
 # mips4 needs R5000 or newer. MIPS V exists on paper only, MIPSpro stops at 4.
 irix65:
-	$(MAKE) CC=cc CFLAGS="-n32 -mips3 -O2 $(INCS) -DMITSHM -woff 1174,1552 $(STATS)" \
+	$(MAKE) CC=cc CFLAGS="-n32 -mips3 -O2 $(INCS) -DMITSHM -woff 1174,1552 $(DEFS)" \
 	  LDFLAGS="-n32 -mips3 -lXt -lXext -lX11 -lm" $(TARGET)
 
 irix65mips4:
-	$(MAKE) CC=cc CFLAGS="-n32 -mips4 -O2 $(INCS) -DMITSHM -woff 1174,1552 $(STATS)" \
+	$(MAKE) CC=cc CFLAGS="-n32 -mips4 -O2 $(INCS) -DMITSHM -woff 1174,1552 $(DEFS)" \
 	  LDFLAGS="-n32 -mips4 -lXt -lXext -lX11 -lm" $(TARGET)
 
 IRIX5_GCCLIB = /usr/tgcware/gcc45/lib/gcc/mips-sgi-irix5.3/4.5.3
@@ -161,7 +172,7 @@ IRIX5_LD = /usr/tgcware/mips-sgi-irix5.3/bin/ld
 
 # gcc fakes _COMPILER_VERSION, so SGI's offsetof() needs MIPSpro's __INTADDR__
 irix53:
-	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include -U_COMPILER_VERSION $(STATS)"
+	$(MAKE) $(OBJECTS) CFLAGS="-O2 $(INCS) -isystem /usr/include -U_COMPILER_VERSION $(DEFS)"
 	$(IRIX5_LD) -o $(TARGET) -init __gcc_init -fini __gcc_fini \
 	  /usr/lib/crt1.o $(IRIX5_GCCLIB)/irix-crti.o $(IRIX5_GCCLIB)/crtbegin.o \
 	  -L$(IRIX5_GCCLIB) -L$(IRIX5_GCCLIB)/../../.. -L/usr/lib \
@@ -169,7 +180,7 @@ irix53:
 	  $(IRIX5_GCCLIB)/crtend.o $(IRIX5_GCCLIB)/irix-crtn.o /usr/lib/crtn.o
 
 netbsd:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include $(STATS)" \
+	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include $(DEFS)" \
 	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 clean:
@@ -179,4 +190,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1131 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd

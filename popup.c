@@ -41,6 +41,7 @@ enum {
   P_FULLSCREEN,
   P_CONTINUOUS,
   P_CURSOR,
+  P_HWCURSOR,
   P_CLIP_OUT,
   P_CLIP_IN,
   P_REFRESH,
@@ -126,6 +127,10 @@ MenuBuild(void)
   sprintf(cursorLabel, "Local cursor: %s", LocalCursorName());
   cursorItem = menu.nItems;
   XwAddButton(&menu, cursorLabel, P_CURSOR, pad, y);
+  y += rowH;
+
+  XwAddCheck(&menu, "X server draws remote cursor", &appData.useHwCursor,
+	     P_HWCURSOR, pad, y);
   y += rowH + 2;
 
   /* separators are stretched to the finished width further down */
@@ -288,6 +293,11 @@ MenuActivate(int id)
 
   case P_CURSOR:
     RunAction("CycleLocalCursor", NULL, 0);
+    RefreshPopup();
+    return;
+
+  case P_HWCURSOR:
+    RunAction("ToggleHardwareCursor", NULL, 0);
     RefreshPopup();
     return;
 

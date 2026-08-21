@@ -42,17 +42,25 @@ static Pixmap rcSavedArea;
 static Pixmap rcShape;		/* cursor pixels in the local visual format */
 static Pixmap rcClip;		/* 1bpp mask, the clip mask of rcGC */
 static GC rcGC = NULL;
-static CARD8 *rcSource;
 static int rcHotX, rcHotY, rcWidth, rcHeight;
 static int rcCursorX = 0, rcCursorY = 0;
 static int rcLockX, rcLockY, rcLockWidth, rcLockHeight;
 static Bool rcCursorHidden, rcLockSet;
+
+/* the shape last sent by the server, kept so that switching how the cursor
+   is drawn does not have to wait for the server to send another one */
+static CARD8 *curSource = NULL;		/* pixels, server format */
+static char *curMask = NULL;		/* mask, XCreateBitmapFromData order */
+static int curHotX, curHotY, curWidth, curHeight;
+static Bool curShapeSet = False;
 
 static Bool SoftCursorInLockedArea(void);
 static void SoftCursorCopyArea(int oper);
 static void SoftCursorDraw(void);
 static void FreeSoftCursor(void);
 static void FreeX11Cursor();
+static Bool InstallCursorShape(void);
+static void RestoreLocalCursor(void);
 
 /* Copied from Xvnc/lib/font/util/utilbitmap.c */
 static unsigned char _reverse_byte[0x100] = {
@@ -162,6 +170,134 @@ Bool HandleXCursor(int xhot, int yhot, int width, int height)
 
 
 
+/*
+ * PixelToXColor turns a pixel in the server's format back into the rgb a
+ * core X cursor wants.
+ */
+
+static void
+PixelToXColor(CARD32 pixel, XColor *col)
+{
+  unsigned int r, g, b;
+
+  r = (pixel >> myFormat.redShift) & myFormat.redMax;
+  g = (pixel >> myFormat.greenShift) & myFormat.greenMax;
+  b = (pixel >> myFormat.blueShift) & myFormat.blueMax;
+
+  col->red   = (unsigned short)(myFormat.redMax ? r * 65535 / myFormat.redMax : 0);
+  col->green = (unsigned short)(myFormat.greenMax ? g * 65535 / myFormat.greenMax : 0);
+  col->blue  = (unsigned short)(myFormat.blueMax ? b * 65535 / myFormat.blueMax : 0);
+  col->flags = DoRed | DoGreen | DoBlue;
+}
+
+
+/*
+ * TryHardwareCursor hands the shape to the X server when it uses no more
+ * than two colors, which is what a plain arrow, an I-beam or a resize
+ * cursor is.  The server then draws it, so moving the pointer costs the
+ * viewer nothing at all - no save, no restore, no put.  Anything with more
+ * colors than a core X cursor can hold falls through to the soft cursor.
+ *
+ * mask is the shape's mask already in XCreateBitmapFromData's bit order.
+ */
+
+static Bool
+TryHardwareCursor(int xhot, int yhot, int width, int height, char *mask)
+{
+  CARD32 colors[2];
+  int nColors = 0;
+  int bytesPerPixel = myFormat.bitsPerPixel / 8;
+  size_t bytesPerRow = (size_t)((width + 7) / 8);
+  char *bits;
+  XColor fg, bg;
+  Drawable dr = DefaultRootWindow(dpy);
+  Pixmap source, maskPm;
+  Cursor cursor;
+  unsigned int wret = 0, hret = 0;
+  int x, y;
+
+  XQueryBestCursor(dpy, dr, width, height, &wret, &hret);
+  if (wret < (unsigned int)width || hret < (unsigned int)height)
+    return False;
+
+  bits = calloc(bytesPerRow, (size_t)height);
+  if (bits == NULL)
+    return False;
+
+  for (y = 0; y < height; y++) {
+    for (x = 0; x < width; x++) {
+      CARD8 *p = &curSource[(y * width + x) * bytesPerPixel];
+      CARD32 pixel;
+      int i;
+
+      if (!(mask[y * bytesPerRow + x / 8] & (1 << (x & 7))))
+	continue;		/* transparent, its color does not matter */
+
+      switch (bytesPerPixel) {
+      case 1:  pixel = *p; break;
+      case 2:  pixel = *(CARD16 *)p; break;
+      default: pixel = *(CARD32 *)p; break;
+      }
+
+      for (i = 0; i < nColors; i++)
+	if (colors[i] == pixel)
+	  break;
+
+      if (i == nColors) {
+	if (nColors == 2) {
+	  free(bits);
+	  return False;		/* needs real colors, use the soft cursor */
+	}
+	colors[nColors++] = pixel;
+      }
+
+      if (i == 1)
+	bits[y * bytesPerRow + x / 8] |= 1 << (x & 7);
+    }
+  }
+
+  if (nColors == 0)
+    colors[0] = 0;
+  if (nColors < 2)
+    colors[1] = colors[0];
+
+  source = XCreateBitmapFromData(dpy, dr, bits, width, height);
+  maskPm = XCreateBitmapFromData(dpy, dr, mask, width, height);
+  free(bits);
+
+  PixelToXColor(colors[1], &fg);
+  PixelToXColor(colors[0], &bg);
+
+  cursor = XCreatePixmapCursor(dpy, source, maskPm, &fg, &bg, xhot, yhot);
+  XFreePixmap(dpy, source);
+  XFreePixmap(dpy, maskPm);
+
+  XDefineCursor(dpy, desktopWin, cursor);
+  FreeX11Cursor();
+  prevXCursor = cursor;
+  prevXCursorSet = True;
+
+  return True;
+}
+
+
+/*
+ * RestoreLocalCursor drops a hardware cursor built from an earlier shape and
+ * puts the local one back, for when the next shape has to be drawn in the
+ * framebuffer after all.
+ */
+
+static void
+RestoreLocalCursor(void)
+{
+  if (!prevXCursorSet)
+    return;
+
+  XDefineCursor(dpy, desktopWin, LocalCursor());
+  FreeX11Cursor();
+}
+
+
 /*********************************************************************
  * HandleCursorShape(). Support for XCursor and RichCursor shape
  * updates. We emulate cursor operating on the frame buffer (that is
@@ -173,10 +309,9 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
   int bytesPerPixel;
   size_t bytesPerRow, bytesMaskData;
   size_t pixelBytes;
-  Drawable dr;
   rfbXCursorColors rgb;
   CARD32 colors[2];
-  XImage *shapeImage;
+  CARD8 *rcSource;
   char *buf;
   CARD8 *ptr;
   int x, y, b, i;
@@ -184,12 +319,14 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
   bytesPerPixel = myFormat.bitsPerPixel / 8;
   bytesPerRow = (width + 7) / 8;
   bytesMaskData = bytesPerRow * height;
-  dr = DefaultRootWindow(dpy);
 
   FreeSoftCursor();
 
-  if (width * height == 0)
+  if (width * height == 0) {
+    RestoreLocalCursor();	/* the server is hiding the cursor */
+    curShapeSet = False;
     return True;
+  }
 
   if (width > RFB_MAX_CURSOR_DIMENSION || height > RFB_MAX_CURSOR_DIMENSION) {
     fprintf(stderr, "Cursor shape too large: %dx%d\n", width, height);
@@ -279,9 +416,8 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 
   }
 
-  /* Read the mask and make it the clip mask.  The wire holds the leftmost
-     pixel of a byte in the high bit, XCreateBitmapFromData wants it in the
-     low one. */
+  /* Read the mask.  The wire holds the leftmost pixel of a byte in the high
+     bit, XCreateBitmapFromData wants it in the low one. */
 
   if (!ReadFromRFBServer(buf, bytesMaskData)) {
     free(rcSource);
@@ -292,21 +428,64 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
   for (i = 0; i < (int)bytesMaskData; i++)
     buf[i] = (char)_reverse_byte[(int)buf[i] & 0xFF];
 
-  rcClip = XCreateBitmapFromData(dpy, dr, buf, width, height);
-  free(buf);
+  /* Keep the shape, so that toggling how the cursor is drawn can rebuild it
+     the other way at once instead of waiting for the server to send the
+     next one - a shape only arrives when it changes. */
+
+  free(curSource);
+  free(curMask);
+  curSource = rcSource;
+  curMask = buf;
+  curHotX = xhot;
+  curHotY = yhot;
+  curWidth = width;
+  curHeight = height;
+  curShapeSet = True;
+
+  return InstallCursorShape();
+}
+
+
+/*
+ * InstallCursorShape puts the shape last received on the screen, either as a
+ * cursor the X server draws or as one we draw into the framebuffer.
+ */
+
+static Bool
+InstallCursorShape(void)
+{
+  XImage *shapeImage;
+  Drawable dr = DefaultRootWindow(dpy);
+
+  FreeSoftCursor();
+
+  if (!curShapeSet)
+    return True;
+
+  /* Two colors is all a core X cursor holds, but it is also all an arrow or
+     an I-beam needs, and then the X server draws it and a pointer move costs
+     us nothing.  Not once the user has picked a local cursor from the F8
+     menu - that choice wins over whatever the server sends. */
+
+  if (appData.useHwCursor && !LocalCursorChosen() &&
+      TryHardwareCursor(curHotX, curHotY, curWidth, curHeight, curMask))
+    return True;
+
+  RestoreLocalCursor();
+
+  rcClip = XCreateBitmapFromData(dpy, dr, curMask, curWidth, curHeight);
 
   /* Convert the pixels once, into a pixmap the server can copy from, so that
      a cursor move is a clipped XCopyArea and not one put per opaque pixel. */
 
-  shapeImage = CreateLocalImage((char *)rcSource, width, height);
-  free(rcSource);
+  shapeImage = CreateLocalImage((char *)curSource, curWidth, curHeight);
   if (shapeImage == NULL) {
     XFreePixmap(dpy, rcClip);
     return False;
   }
 
-  rcShape = XCreatePixmap(dpy, dr, width, height, visdepth);
-  XPutImage(dpy, rcShape, gc, shapeImage, 0, 0, 0, 0, width, height);
+  rcShape = XCreatePixmap(dpy, dr, curWidth, curHeight, visdepth);
+  XPutImage(dpy, rcShape, gc, shapeImage, 0, 0, 0, 0, curWidth, curHeight);
   XDestroyImage(shapeImage);
 
   if (rcGC == NULL) {
@@ -320,11 +499,11 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 
   /* Set remaining data associated with cursor. */
 
-  rcSavedArea = XCreatePixmap(dpy, dr, width, height, visdepth);
-  rcHotX = xhot;
-  rcHotY = yhot;
-  rcWidth = width;
-  rcHeight = height;
+  rcSavedArea = XCreatePixmap(dpy, dr, curWidth, curHeight, visdepth);
+  rcHotX = curHotX;
+  rcHotY = curHotY;
+  rcWidth = curWidth;
+  rcHeight = curHeight;
 
   SoftCursorCopyArea(OPER_SAVE);
   SoftCursorDraw();
@@ -334,6 +513,25 @@ Bool HandleCursorShape(int xhot, int yhot, int width, int height, CARD32 enc)
 
   prevSoftCursorSet = True;
   return True;
+}
+
+
+/*
+ * ToggleHardwareCursor is the F8 menu's switch between letting the X server
+ * draw a two-color remote cursor and drawing every shape ourselves.  Build
+ * with HWCURSOR=false to have it start off.
+ */
+
+void
+ToggleHardwareCursor(Widget w, XEvent *ev, String *params,
+		     Cardinal *num_params)
+{
+  appData.useHwCursor = !appData.useHwCursor;
+
+  InstallCursorShape();
+
+  fprintf(stderr, "Remote cursor drawn by: %s\n",
+	  appData.useHwCursor ? "X server when it can" : "viewer");
 }
 
 /*********************************************************************
