@@ -82,15 +82,18 @@ sunos4:
 	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/openwin/include $(STATS)" \
 	  LDFLAGS="-L/usr/openwin/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
-# All HP-UX targets need gmake. 9 and 10 use the native ANSI cc, 11 uses gcc.
+# All HP-UX targets need gmake and build with the bundled HP ANSI C compiler,
+# which is at the same path on every release from 10.20 up.
+HPUX_CC = /opt/ansic/bin/cc
+
 # hpux9 uses X11R5 which has no XShm headers.
 hpux9:
-	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(STATS)" \
+	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae -O $(INCS) -I/usr/include/X11R5 -I/usr/contrib/X11R5/include $(STATS)" \
 	  LDFLAGS="-L/usr/lib/X11R5 -L/usr/contrib/X11R5/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 # On 10.20 Xt is a static archive in /usr/contrib, hence explicit -lSM -lICE.
 hpux10:
-	$(MAKE) CC=cc CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
+	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae -O $(INCS) -DMITSHM -I/usr/include/X11R6 -I/usr/contrib/X11R6/include $(STATS)" \
 	  LDFLAGS="-L/usr/lib/X11R6 -L/usr/contrib/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
 # 11i keeps all X11 headers in /usr/include/X11 and ships the shared libs only
@@ -101,13 +104,13 @@ HPUX11_XLIBS = $(HPUX11_X11)/libXt.3 $(HPUX11_X11)/libSM.2 $(HPUX11_X11)/libICE.
   $(HPUX11_X11)/libXext.3 $(HPUX11_X11)/libX11.3
 
 hpux11:
-	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DMITSHM $(STATS)" \
+	$(MAKE) CC=$(HPUX_CC) CFLAGS="-Ae +O3 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="$(HPUX11_XLIBS) -lm" $(TARGET)
 
 # 11.31 on PA-RISC 2.0. Unlike 11i v1 this one does ship libFOO.sl aliases, so
-# plain -l works; no gcc here, the bundled ANSI cc is /opt/ansic/bin/cc.
+# plain -l works.
 hpux1131:
-	$(MAKE) CC=/opt/ansic/bin/cc \
+	$(MAKE) CC=$(HPUX_CC) \
 	  CFLAGS="-Ae +O3 +DA2.0 +DS2.0 $(INCS) -DMITSHM $(STATS)" \
 	  LDFLAGS="-L/usr/lib/X11R6 -lXt -lSM -lICE -lXext -lX11 -lm" $(TARGET)
 
