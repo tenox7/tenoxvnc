@@ -246,6 +246,9 @@ ScrollRepaint(void)
   if (clipW <= 0 || clipH <= 0)
     return;
 
+  /* putting the image back wipes the soft cursor off the window */
+  SoftCursorLockArea(0, 0, si.framebufferWidth, si.framebufferHeight);
+
   if (putW <= 0 || scrollX >= putX + putW || scrollY >= putY + putH ||
       scrollX + clipW <= putX || scrollY + clipH <= putY) {
     PutImageRect(scrollX, scrollY, clipW, clipH);	/* nothing in common */
@@ -266,6 +269,8 @@ ScrollRepaint(void)
   putY = scrollY;
   putW = clipW;
   putH = clipH;
+
+  SoftCursorUnlockScreen();
 }
 
 

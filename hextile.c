@@ -30,11 +30,24 @@
 #define CARDBPP CONCAT2E(CARD,BPP)
 #define GET_PIXEL CONCAT2E(GET_PIXEL,BPP)
 
+/*
+ * Every tile is built in the local image and a row of tiles goes to the
+ * screen in one request.  Drawing it with XFillRectangle instead cost an
+ * XChangeGC and an XFillRectangle for every subrect - a full screen of
+ * tiles is thousands of requests - and left the image stale, since nothing
+ * the server sent as Hextile ever reached it.
+ */
+
+#if (BPP == 8)
+#define HEXTILE_PIXEL(p) (useColorMap ? colorToPixel[p] : (unsigned long)(p))
+#else
+#define HEXTILE_PIXEL(p) ((unsigned long)(p))
+#endif
+
 static Bool
 HandleHextileBPP (int rx, int ry, int rw, int rh)
 {
   CARDBPP bg, fg;
-  XGCValues gcv;
   int i;
   CARD8 *ptr;
   int x, y, w, h;
@@ -43,12 +56,14 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
   CARD8 nSubrects;
 
   for (y = ry; y < ry+rh; y += 16) {
+    h = 16;
+    if (ry+rh - y < 16)
+      h = ry+rh - y;
+
     for (x = rx; x < rx+rw; x += 16) {
-      w = h = 16;
+      w = 16;
       if (rx+rw - x < 16)
 	w = rx+rw - x;
-      if (ry+rh - y < 16)
-	h = ry+rh - y;
 
       if (!ReadFromRFBServer((char *)&subencoding, 1))
 	return False;
@@ -57,7 +72,7 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	if (!ReadFromRFBServer(buffer, w * h * (BPP / 8)))
 	  return False;
 
-	CopyDataToScreen(buffer, x, y, w, h);
+	CopyDataToImage(buffer, x, y, w, h);
 	continue;
       }
 
@@ -65,15 +80,7 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	if (!ReadFromRFBServer((char *)&bg, sizeof(bg)))
 	  return False;
 
-#if (BPP == 8)
-      if (useColorMap)
-	gcv.foreground = colorToPixel[bg];
-      else
-#endif
-	gcv.foreground = bg;
-
-      XChangeGC(dpy, gc, GCForeground, &gcv);
-      XFillRectangle(dpy, desktopWin, gc, x, y, w, h);
+      FillImageRect(x, y, w, h, HEXTILE_PIXEL(bg));
 
       if (subencoding & rfbHextileForegroundSpecified)
 	if (!ReadFromRFBServer((char *)&fg, sizeof(fg)))
@@ -100,29 +107,16 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  sw = rfbHextileExtractW(*ptr);
 	  sh = rfbHextileExtractH(*ptr);
 	  ptr++;
-#if (BPP == 8)
-	  if (useColorMap)
-	    gcv.foreground = colorToPixel[fg];
-	  else
-#endif
-	    gcv.foreground = fg;
-
-	  XChangeGC(dpy, gc, GCForeground, &gcv);
-	  XFillRectangle(dpy, desktopWin, gc, x+sx, y+sy, sw, sh);
+	  FillImageRect(x+sx, y+sy, sw, sh, HEXTILE_PIXEL(fg));
 	}
 
       } else {
+	unsigned long pixel;
+
 	if (!ReadFromRFBServer(buffer, nSubrects * 2))
 	  return False;
 
-#if (BPP == 8)
-	if (useColorMap)
-	  gcv.foreground = colorToPixel[fg];
-	else
-#endif
-	  gcv.foreground = fg;
-
-	XChangeGC(dpy, gc, GCForeground, &gcv);
+	pixel = HEXTILE_PIXEL(fg);
 
 	for (i = 0; i < nSubrects; i++) {
 	  sx = rfbHextileExtractX(*ptr);
@@ -131,11 +125,15 @@ HandleHextileBPP (int rx, int ry, int rw, int rh)
 	  sw = rfbHextileExtractW(*ptr);
 	  sh = rfbHextileExtractH(*ptr);
 	  ptr++;
-	  XFillRectangle(dpy, desktopWin, gc, x+sx, y+sy, sw, sh);
+	  FillImageRect(x+sx, y+sy, sw, sh, pixel);
 	}
       }
     }
+
+    PutImageRect(rx, y, rw, h);
   }
 
   return True;
 }
+
+#undef HEXTILE_PIXEL

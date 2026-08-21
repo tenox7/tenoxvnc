@@ -47,6 +47,7 @@ static int wantResizeWidth, wantResizeHeight;
 enum { CURSOR_DOT, CURSOR_ARROW, CURSOR_NONE };
 static const char *cursorModeNames[] = { "dot", "arrow", "none" };
 static int cursorMode = CURSOR_DOT;
+static Bool localCursorChosen = False;
 
 static Cursor CreateDotCursor();
 static Cursor CursorForMode(void);
@@ -420,8 +421,15 @@ HandleBasicDesktopEvent(Widget w, XtPointer ptr, XEvent *ev, Boolean *cont)
       if (ev->xexpose.height <= 0) break;
     }
 
-    SendFramebufferUpdateRequest(ev->xexpose.x, ev->xexpose.y,
-				 ev->xexpose.width, ev->xexpose.height, False);
+    /* The image is a mirror of the framebuffer, so put the pixels back from
+       it rather than paying a round trip and having the server encode and
+       send what we already have. */
+
+    SoftCursorLockArea(ev->xexpose.x, ev->xexpose.y,
+		       ev->xexpose.width, ev->xexpose.height);
+    PutImageRect(ev->xexpose.x, ev->xexpose.y,
+		 ev->xexpose.width, ev->xexpose.height);
+    SoftCursorUnlockScreen();
     break;
 
   case LeaveNotify:
@@ -651,9 +659,30 @@ CycleLocalCursor(Widget w, XEvent *ev, String *params, Cardinal *num_params)
 
   /* stop remote cursor shapes overriding the explicit choice */
   appData.useX11Cursor = False;
+  localCursorChosen = True;
 
   XDefineCursor(dpy, desktopWin, CursorForMode());
   fprintf(stderr, "Local cursor: %s\n", cursorModeNames[cursorMode]);
+}
+
+
+/*
+ * LocalCursor is the X cursor for the current local cursor mode, and
+ * LocalCursorChosen says whether the user picked it from the F8 menu.  A
+ * remote shape that the X server can draw itself replaces the local cursor,
+ * but not once the user has asked for a particular one.
+ */
+
+Cursor
+LocalCursor(void)
+{
+  return CursorForMode();
+}
+
+Bool
+LocalCursorChosen(void)
+{
+  return localCursorChosen;
 }
 
 
@@ -870,6 +899,185 @@ CopyDataToScreen(char *buf, int x, int y, int width, int height)
 {
   CopyDataToImage(buf, x, y, width, height);
   PutImageRect(x, y, width, height);
+}
+
+
+/*
+ * ClipToImage trims a rectangle to the framebuffer.  Subrect coordinates in
+ * Hextile, RRE and CoRRE come straight off the wire, and a Hextile subrect
+ * may legitimately run past the end of its own tile, so this is what keeps
+ * an out of range one from writing outside the image.  Returns False when
+ * nothing is left.
+ */
+
+static Bool
+ClipToImage(int *x, int *y, int *width, int *height)
+{
+  if (*width <= 0 || *height <= 0)
+    return False;
+
+  if (*x < 0) { *width += *x; *x = 0; }
+  if (*y < 0) { *height += *y; *y = 0; }
+  if (*x + *width > si.framebufferWidth)
+    *width = si.framebufferWidth - *x;
+  if (*y + *height > si.framebufferHeight)
+    *height = si.framebufferHeight - *y;
+
+  return (*width > 0 && *height > 0);
+}
+
+
+/*
+ * FillImageRect paints a solid rectangle into the local image.  The pixel is
+ * an X pixel value, already through colorToPixel[] if the server is sending
+ * us a reduced format.  Hextile, RRE and CoRRE build a rectangle out of
+ * these and then put it on the screen in one request.
+ */
+
+void
+FillImageRect(int x, int y, int width, int height, unsigned long pixel)
+{
+  int stride, q, p, xcur;
+  char *row;
+
+  if (image == NULL || !ClipToImage(&x, &y, &width, &height))
+    return;
+
+  stride = image->bytes_per_line;
+  row = image->data + y * stride;
+
+  switch (visbpp) {
+
+  case 8:
+    for (q = 0; q < height; q++, row += stride)
+      memset(row + x, (int)(pixel & 0xFF), (size_t)width);
+    break;
+
+  case 16:
+    for (q = 0; q < height; q++, row += stride) {
+      CARD16 *d = (CARD16 *)row + x;
+      CARD16 v = (CARD16)pixel;
+
+      for (p = width; p >= 8; p -= 8) {
+	d[0] = v; d[1] = v; d[2] = v; d[3] = v;
+	d[4] = v; d[5] = v; d[6] = v; d[7] = v;
+	d += 8;
+      }
+      while (p-- > 0)
+	*d++ = v;
+    }
+    break;
+
+  case 32:
+    for (q = 0; q < height; q++, row += stride) {
+      CARD32 *d = (CARD32 *)row + x;
+      CARD32 v = (CARD32)pixel;
+
+      for (p = width; p >= 8; p -= 8) {
+	d[0] = v; d[1] = v; d[2] = v; d[3] = v;
+	d[4] = v; d[5] = v; d[6] = v; d[7] = v;
+	d += 8;
+      }
+      while (p-- > 0)
+	*d++ = v;
+    }
+    break;
+
+  case 1:
+    for (q = 0; q < height; q++, row += stride) {
+      CARD8 *d = (CARD8 *)row + x / 8;
+
+      xcur = 7 - (x & 7);
+      for (p = 0; p < width; p++) {
+	*d = (CARD8)((*d & ~(1 << xcur)) | ((pixel & 1) << xcur));
+	if (xcur-- == 0) {
+	  xcur = 7;
+	  d++;
+	}
+      }
+    }
+    break;
+  }
+}
+
+
+/*
+ * CopyImageRect moves a block of the local image, so that a CopyRect leaves
+ * the image a mirror of the window rather than stale wherever the remote
+ * desktop scrolled.
+ */
+
+void
+CopyImageRect(int srcX, int srcY, int width, int height, int dstX, int dstY)
+{
+  int stride, bytes, q, step;
+  char *src, *dst;
+
+  if (image == NULL || width <= 0 || height <= 0)
+    return;
+
+  /* clip both ends of the move, keeping them aligned */
+  if (srcX < 0) { width += srcX; dstX -= srcX; srcX = 0; }
+  if (srcY < 0) { height += srcY; dstY -= srcY; srcY = 0; }
+  if (dstX < 0) { width += dstX; srcX -= dstX; dstX = 0; }
+  if (dstY < 0) { height += dstY; srcY -= dstY; dstY = 0; }
+
+  if (srcX + width > si.framebufferWidth)
+    width = si.framebufferWidth - srcX;
+  if (dstX + width > si.framebufferWidth)
+    width = si.framebufferWidth - dstX;
+  if (srcY + height > si.framebufferHeight)
+    height = si.framebufferHeight - srcY;
+  if (dstY + height > si.framebufferHeight)
+    height = si.framebufferHeight - dstY;
+
+  if (width <= 0 || height <= 0)
+    return;
+
+  if (visbpp == 1) {
+    /* no byte addressing to move; let the next update repaint it */
+    return;
+  }
+
+  stride = image->bytes_per_line;
+  bytes = width * visbpp / 8;
+
+  /* overlapping moves downward have to run bottom up */
+  if (dstY > srcY) {
+    src = image->data + (srcY + height - 1) * stride + srcX * visbpp / 8;
+    dst = image->data + (dstY + height - 1) * stride + dstX * visbpp / 8;
+    step = -stride;
+  } else {
+    src = image->data + srcY * stride + srcX * visbpp / 8;
+    dst = image->data + dstY * stride + dstX * visbpp / 8;
+    step = stride;
+  }
+
+  for (q = 0; q < height; q++, src += step, dst += step)
+    memmove(dst, src, (size_t)bytes);
+}
+
+
+/*
+ * ImageRow hands back the address of a pixel in the local image, so the raw
+ * decoder can read the wire straight into it instead of staging every
+ * rectangle in a scratch buffer first.  Only useful when the server is
+ * sending our own pixel format.
+ */
+
+char *
+ImageRow(int x, int y)
+{
+  if (image == NULL)
+    return NULL;
+
+  return image->data + y * image->bytes_per_line + x * myFormat.bitsPerPixel / 8;
+}
+
+int
+ImageStride(void)
+{
+  return image ? image->bytes_per_line : 0;
 }
 
 

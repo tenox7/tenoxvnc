@@ -145,6 +145,7 @@ typedef struct {
   Bool enableJPEG;
   Bool useRemoteCursor;
   Bool useX11Cursor;
+  Bool useHwCursor;		/* let the X server draw 2-color remote cursors */
   String localCursor;
   Bool autoPass;
 
@@ -196,6 +197,8 @@ extern Bool HandleCursorPos(int x, int y);
 extern void SoftCursorLockArea(int x, int y, int w, int h);
 extern void SoftCursorUnlockScreen(void);
 extern void SoftCursorMove(int x, int y);
+extern void ToggleHardwareCursor(Widget w, XEvent *event, String *params,
+				 Cardinal *num_params);
 
 /* desktop.c */
 
@@ -216,6 +219,14 @@ extern void CopyDataToImage(char *buf, int x, int y, int width, int height);
 extern void PutImageRect(int x, int y, int width, int height);
 extern XImage *CreateLocalImage(char *buf, int width, int height);
 extern void SyncShmPuts(void);
+extern void FillImageRect(int x, int y, int width, int height,
+			  unsigned long pixel);
+extern void CopyImageRect(int srcX, int srcY, int width, int height,
+			  int dstX, int dstY);
+extern char *ImageRow(int x, int y);
+extern int ImageStride(void);
+extern Cursor LocalCursor(void);
+extern Bool LocalCursorChosen(void);
 extern void RepaintScreen(Widget w, XEvent *event, String *params,
 			  Cardinal *num_params);
 extern void CycleLocalCursor(Widget w, XEvent *event, String *params,

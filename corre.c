@@ -29,11 +29,16 @@
 #define HandleCoRREBPP CONCAT2E(HandleCoRRE,BPP)
 #define CARDBPP CONCAT2E(CARD,BPP)
 
+#if (BPP == 8)
+#define CORRE_PIXEL(p) (useColorMap ? colorToPixel[p] : (unsigned long)(p))
+#else
+#define CORRE_PIXEL(p) ((unsigned long)(p))
+#endif
+
 static Bool
 HandleCoRREBPP (int rx, int ry, int rw, int rh)
 {
     rfbRREHeader hdr;
-    XGCValues gcv;
     int i;
     CARDBPP pix;
     CARD8 *ptr;
@@ -64,14 +69,7 @@ HandleCoRREBPP (int rx, int ry, int rw, int rh)
     if (!ReadFromRFBServer((char *)&pix, sizeof(pix)))
 	return False;
 
-#if (BPP == 8)
-    gcv.foreground = (useColorMap ? colorToPixel[pix] : pix);
-#else
-    gcv.foreground = pix;
-#endif
-
-    XChangeGC(dpy, gc, GCForeground, &gcv);
-    XFillRectangle(dpy, desktopWin, gc, rx, ry, rw, rh);
+    FillImageRect(rx, ry, rw, rh, CORRE_PIXEL(pix));
 
     if (!ReadFromRFBServer(buffer, hdr.nSubrects * (4 + (BPP / 8))))
 	return False;
@@ -86,15 +84,12 @@ HandleCoRREBPP (int rx, int ry, int rw, int rh)
 	w = *ptr++;
 	h = *ptr++;
 
-#if (BPP == 8)
-	gcv.foreground = (useColorMap ? colorToPixel[pix] : pix);
-#else
-	gcv.foreground = pix;
-#endif
-
-	XChangeGC(dpy, gc, GCForeground, &gcv);
-	XFillRectangle(dpy, desktopWin, gc, rx + x, ry + y, w, h);
+	FillImageRect(rx + x, ry + y, w, h, CORRE_PIXEL(pix));
     }
+
+    PutImageRect(rx, ry, rw, rh);
 
     return True;
 }
+
+#undef CORRE_PIXEL

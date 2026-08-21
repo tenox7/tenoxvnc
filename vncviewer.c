@@ -193,6 +193,13 @@ main(int argc, char **argv)
 
   StatsStartup();
 
+  /* Ask for the first screenful.  Every later request is the incremental one
+     the update handler sends; Expose repaints from the local image and no
+     longer asks the server for anything. */
+
+  SendFramebufferUpdateRequest(0, 0, si.framebufferWidth,
+			       si.framebufferHeight, False);
+
   /* Now enter the main loop, processing VNC messages.  X events will
      automatically be processed whenever the VNC connection is idle. */
 

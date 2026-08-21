@@ -29,11 +29,16 @@
 #define HandleRREBPP CONCAT2E(HandleRRE,BPP)
 #define CARDBPP CONCAT2E(CARD,BPP)
 
+#if (BPP == 8)
+#define RRE_PIXEL(p) (useColorMap ? colorToPixel[p] : (unsigned long)(p))
+#else
+#define RRE_PIXEL(p) ((unsigned long)(p))
+#endif
+
 static Bool
 HandleRREBPP (int rx, int ry, int rw, int rh)
 {
   rfbRREHeader hdr;
-  XGCValues gcv;
   int i;
   CARDBPP pix;
   rfbRectangle subrect;
@@ -52,14 +57,10 @@ HandleRREBPP (int rx, int ry, int rw, int rh)
   if (!ReadFromRFBServer((char *)&pix, sizeof(pix)))
     return False;
 
-#if (BPP == 8)
-  gcv.foreground = (useColorMap ? colorToPixel[pix] : pix);
-#else
-  gcv.foreground = pix;
-#endif
+  FillImageRect(rx, ry, rw, rh, RRE_PIXEL(pix));
 
-  XChangeGC(dpy, gc, GCForeground, &gcv);
-  XFillRectangle(dpy, desktopWin, gc, rx, ry, rw, rh);
+  /* Fills go into the local image and the whole rectangle goes to the screen
+     in one request, rather than an XChangeGC and an XFillRectangle each. */
 
   for (i = 0; i < (int) hdr.nSubrects; i++) {
     if (!ReadFromRFBServer((char *)&pix, sizeof(pix)))
@@ -73,16 +74,13 @@ HandleRREBPP (int rx, int ry, int rw, int rh)
     subrect.w = Swap16IfLE(subrect.w);
     subrect.h = Swap16IfLE(subrect.h);
 
-#if (BPP == 8)
-    gcv.foreground = (useColorMap ? colorToPixel[pix] : pix);
-#else
-    gcv.foreground = pix;
-#endif
-
-    XChangeGC(dpy, gc, GCForeground, &gcv);
-    XFillRectangle(dpy, desktopWin, gc, rx + subrect.x, ry + subrect.y,
-		   subrect.w, subrect.h);
+    FillImageRect(rx + subrect.x, ry + subrect.y, subrect.w, subrect.h,
+		  RRE_PIXEL(pix));
   }
+
+  PutImageRect(rx, ry, rw, rh);
 
   return True;
 }
+
+#undef RRE_PIXEL

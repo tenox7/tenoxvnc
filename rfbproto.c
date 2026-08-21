@@ -1491,6 +1491,11 @@ HandleRFBServerMessage()
 
     msg.fu.nRects = Swap16IfLE(msg.fu.nRects);
 
+    /* Decoding writes over the shared image, so the server has to be done
+       reading it first.  Once per update, not once per put: the puts within
+       one update are for disjoint areas. */
+    SyncShmPuts();
+
     for (i = 0; i < msg.fu.nRects; i++) {
       StatsRectBegin(&prof);
 
@@ -1581,6 +1586,69 @@ HandleRFBServerMessage()
       case rfbEncodingRaw:
 
 	bytesPerLine = rect.r.w * myFormat.bitsPerPixel / 8;
+
+	/* The wire format is the image format unless we asked for a reduced
+	   one, so the rows can be read straight into the image instead of
+	   through a scratch buffer and a second copy. */
+
+	if (!useColorMap && appData.rawDelay == 0) {
+	  char *row = ImageRow(rect.r.x, rect.r.y);
+	  int stride = ImageStride();
+	  int n;
+
+	  if (bytesPerLine == stride) {
+	    if (!ReadFromRFBServer(row, (unsigned int)bytesPerLine * rect.r.h))
+	      return False;
+	  } else {
+	    for (n = 0; n < rect.r.h; n++, row += stride)
+	      if (!ReadFromRFBServer(row, bytesPerLine))
+		return False;
+	  }
+
+	  STATS(vncStats.blitPixels += (double)rect.r.w * rect.r.h);
+	  PutImageRect(rect.r.x, rect.r.y, rect.r.w, rect.r.h);
+	  break;
+	}
+
+	/* A reduced format still has to be translated, but it can be
+	   translated straight out of the socket buffer.  Reduced formats are
+	   one byte per pixel, so a run of bytes is a run of pixels. */
+
+	if (useColorMap && appData.rawDelay == 0) {
+	  unsigned int left = (unsigned int)rect.r.w * rect.r.h;
+	  int cx = 0, cy = 0;
+
+	  while (left > 0) {
+	    char *p, *q;
+	    unsigned int got, n;
+
+	    if (!ReadFromRFBServerPeek(&p, left, &got))
+	      return False;
+
+	    q = p;
+	    left -= got;
+	    while (got > 0) {
+	      n = (unsigned int)(rect.r.w - cx);
+	      if (n > got)
+		n = got;
+
+	      CopyDataToImage(q, rect.r.x + cx, rect.r.y + cy, (int)n, 1);
+
+	      q += n;
+	      got -= n;
+	      cx += (int)n;
+	      if (cx == rect.r.w) {
+		cx = 0;
+		cy++;
+	      }
+	    }
+	    ReadFromRFBServerSkip((unsigned int)(q - p));
+	  }
+
+	  PutImageRect(rect.r.x, rect.r.y, rect.r.w, rect.r.h);
+	  break;
+	}
+
 	linesToRead = BUFFER_SIZE / bytesPerLine;
 
 	while (rect.r.h > 0) {
@@ -1628,6 +1696,11 @@ HandleRFBServerMessage()
 	  XFillRectangle(dpy, desktopWin, srcGC, cr.srcX, cr.srcY,
 			 rect.r.w, rect.r.h);
 	}
+
+	/* Move it in the image as well, or the image stops being a mirror of
+	   the window everywhere the remote desktop has ever scrolled. */
+	CopyImageRect(cr.srcX, cr.srcY, rect.r.w, rect.r.h,
+		      rect.r.x, rect.r.y);
 
 	XCopyArea(dpy, desktopWin, desktopWin, gc, cr.srcX, cr.srcY,
 		  rect.r.w, rect.r.h, rect.r.x, rect.r.y);

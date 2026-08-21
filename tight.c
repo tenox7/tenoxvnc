@@ -144,6 +144,11 @@ HandleTightBPP (int rx, int ry, int rw, int rh)
     gcv.foreground = fill_color;
 #endif
 
+    /* One solid area, so it stays a cheap XFillRectangle rather than a put
+       of the whole rectangle - but the image needs it too, or an Expose
+       would repaint the area from pixels the fill never reached. */
+    FillImageRect(rx, ry, rw, rh, gcv.foreground);
+
     XChangeGC(dpy, gc, GCForeground, &gcv);
     XFillRectangle(dpy, desktopWin, gc, rx, ry, rw, rh);
     STATS(vncStats.tightFill++);
@@ -409,36 +414,43 @@ static void
 FilterGradient24 (int numRows, CARD32 *dst)
 {
   int x, y, c;
-  CARD8 thisRow[2048*3];
   CARD8 pix[3];
   int est[3];
 
+  /* See FilterGradientBPP below for why this walks with pointers and keeps
+     the previous row in place instead of building a second one. */
+
   for (y = 0; y < numRows; y++) {
+    CARD8 *tr = tightPrevRow;
+    CARD8 *s = (CARD8 *)buffer + y * rectWidth * 3;
+    CARD32 *d = dst + y * rectWidth;
+    CARD8 prev[3];
 
     /* First pixel in a row */
-    for (c = 0; c < 3; c++) {
-      pix[c] = tightPrevRow[c] + buffer[y*rectWidth*3+c];
-      thisRow[c] = pix[c];
-    }
-    dst[y*rectWidth] = RGB24_TO_PIXEL32(pix[0], pix[1], pix[2]);
+    pix[0] = tr[0] + s[0];
+    pix[1] = tr[1] + s[1];
+    pix[2] = tr[2] + s[2];
+    prev[0] = tr[0]; prev[1] = tr[1]; prev[2] = tr[2];
+    tr[0] = pix[0]; tr[1] = pix[1]; tr[2] = pix[2];
+    *d++ = RGB24_TO_PIXEL32(pix[0], pix[1], pix[2]);
+    s += 3;
+    tr += 3;
 
     /* Remaining pixels of a row */
-    for (x = 1; x < rectWidth; x++) {
+    for (x = 1; x < rectWidth; x++, s += 3, tr += 3) {
       for (c = 0; c < 3; c++) {
-	est[c] = (int)tightPrevRow[x*3+c] + (int)pix[c] -
-		 (int)tightPrevRow[(x-1)*3+c];
-	if (est[c] > 0xFF) {
+	est[c] = (int)tr[c] + (int)pix[c] - (int)prev[c];
+	if (est[c] > 0xFF)
 	  est[c] = 0xFF;
-	} else if (est[c] < 0x00) {
+	else if (est[c] < 0x00)
 	  est[c] = 0x00;
-	}
-	pix[c] = (CARD8)est[c] + buffer[(y*rectWidth+x)*3+c];
-	thisRow[x*3+c] = pix[c];
-      }
-      dst[y*rectWidth+x] = RGB24_TO_PIXEL32(pix[0], pix[1], pix[2]);
-    }
 
-    memcpy(tightPrevRow, thisRow, rectWidth * 3);
+	prev[c] = tr[c];
+	pix[c] = (CARD8)est[c] + s[c];
+	tr[c] = pix[c];
+      }
+      *d++ = RGB24_TO_PIXEL32(pix[0], pix[1], pix[2]);
+    }
   }
 }
 
@@ -450,7 +462,6 @@ FilterGradientBPP (int numRows, CARDBPP *dst)
   int x, y, c;
   CARDBPP *src = (CARDBPP *)buffer;
   CARD16 *thatRow = (CARD16 *)tightPrevRow;
-  CARD16 thisRow[2048*3];
   CARD16 pix[3];
   CARD16 max[3];
   int shift[3];
@@ -471,30 +482,44 @@ FilterGradientBPP (int numRows, CARDBPP *dst)
   shift[1] = myFormat.greenShift;
   shift[2] = myFormat.blueShift;
 
+  /* Walked with pointers and with the three color components spelled out.
+     The indexed form recomputed src[y*rectWidth+x] and three separate
+     thisRow/thatRow subscripts for every pixel, and none of them can be
+     hoisted, since dst and the row buffers alias as far as the compiler
+     knows.  thisRow is also gone: the estimate only ever looks one pixel
+     back, so the previous row can be updated in place behind the walk. */
+
   for (y = 0; y < numRows; y++) {
+    CARD16 *tr = thatRow;
+    CARDBPP *s = src + y * rectWidth;
+    CARDBPP *d = dst + y * rectWidth;
+    CARD16 prev[3];
 
     /* First pixel in a row */
-    for (c = 0; c < 3; c++) {
-      pix[c] = (CARD16)((src[y*rectWidth] >> shift[c]) + thatRow[c] & max[c]);
-      thisRow[c] = pix[c];
-    }
-    dst[y*rectWidth] = RGB_TO_PIXEL(BPP, pix[0], pix[1], pix[2]);
+    pix[0] = (CARD16)(((*s >> shift[0]) + tr[0]) & max[0]);
+    pix[1] = (CARD16)(((*s >> shift[1]) + tr[1]) & max[1]);
+    pix[2] = (CARD16)(((*s >> shift[2]) + tr[2]) & max[2]);
+    prev[0] = tr[0]; prev[1] = tr[1]; prev[2] = tr[2];
+    tr[0] = pix[0]; tr[1] = pix[1]; tr[2] = pix[2];
+    *d++ = RGB_TO_PIXEL(BPP, pix[0], pix[1], pix[2]);
+    s++;
+    tr += 3;
 
     /* Remaining pixels of a row */
-    for (x = 1; x < rectWidth; x++) {
+    for (x = 1; x < rectWidth; x++, s++, tr += 3) {
       for (c = 0; c < 3; c++) {
-	est[c] = (int)thatRow[x*3+c] + (int)pix[c] - (int)thatRow[(x-1)*3+c];
-	if (est[c] > (int)max[c]) {
+	est[c] = (int)tr[c] + (int)pix[c] - (int)prev[c];
+	if (est[c] > (int)max[c])
 	  est[c] = (int)max[c];
-	} else if (est[c] < 0) {
+	else if (est[c] < 0)
 	  est[c] = 0;
-	}
-	pix[c] = (CARD16)((src[y*rectWidth+x] >> shift[c]) + est[c] & max[c]);
-	thisRow[x*3+c] = pix[c];
+
+	prev[c] = tr[c];
+	pix[c] = (CARD16)(((*s >> shift[c]) + est[c]) & max[c]);
+	tr[c] = pix[c];
       }
-      dst[y*rectWidth+x] = RGB_TO_PIXEL(BPP, pix[0], pix[1], pix[2]);
+      *d++ = RGB_TO_PIXEL(BPP, pix[0], pix[1], pix[2]);
     }
-    memcpy(thatRow, thisRow, rectWidth * 3 * sizeof(CARD16));
   }
 }
 
