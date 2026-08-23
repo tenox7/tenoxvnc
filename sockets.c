@@ -135,16 +135,27 @@ ReadSock(char *p, unsigned int n)
 
     if (i == 0) {
       if (errorMessageOnReadFailure)
-	fprintf(stderr, "%s: VNC server closed connection\n", programName);
+	ConnError("VNC server closed the connection");
       return -1;
     }
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
-      fprintf(stderr, "%s", programName);
-      perror(": read");
+      ConnError("Read from VNC server failed: %s", strerror(errno));
       return -1;
     }
     ProcessXtEvents();
   }
+}
+
+/*
+ * ResetReadBuffer throws away whatever the last connection left buffered, so
+ * that a retry after a failed one starts the handshake on clean bytes.
+ */
+
+void
+ResetReadBuffer(void)
+{
+  bufoutptr = buf;
+  buffered = 0;
 }
 
 Bool
@@ -248,18 +259,17 @@ WriteExact(int sock, char *buf, int n)
 	  FD_SET(rfbsock,&fds);
 
 	  if (select(rfbsock+1, NULL, &fds, NULL, NULL) <= 0) {
-	    fprintf(stderr, "%s", programName);
-	    perror(": select");
+	    ConnError("Waiting for the VNC server failed: %s",
+		      strerror(errno));
 	    return False;
 	  }
 	  j = 0;
 	} else {
-	  fprintf(stderr, "%s", programName);
-	  perror(": write");
+	  ConnError("Write to VNC server failed: %s", strerror(errno));
 	  return False;
 	}
       } else {
-	fprintf(stderr,"%s: write failed\n",programName);
+	ConnError("Write to VNC server failed");
 	return False;
       }
     }
@@ -270,13 +280,15 @@ WriteExact(int sock, char *buf, int n)
 
 
 /*
- * ConnectToTcpAddr connects to the given TCP port.
+ * ConnectToTcpAddr connects to the given TCP port.  It says nothing itself:
+ * errno survives the close() so that the caller, which knows the host name
+ * that was dialled, can report what happened.
  */
 
 int
 ConnectToTcpAddr(unsigned int host, int port)
 {
-  int sock;
+  int sock, err;
   struct sockaddr_in addr;
   int one = 1;
 
@@ -285,24 +297,15 @@ ConnectToTcpAddr(unsigned int host, int port)
   addr.sin_addr.s_addr = host;
 
   sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock < 0) {
-    fprintf(stderr, "%s", programName);
-    perror(": ConnectToTcpAddr: socket");
+  if (sock < 0)
     return -1;
-  }
 
-  if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-    fprintf(stderr, "%s", programName);
-    perror(": ConnectToTcpAddr: connect");
-    close(sock);
-    return -1;
-  }
-
-  if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+  if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0 ||
+      setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
 		 (char *)&one, sizeof(one)) < 0) {
-    fprintf(stderr, "%s", programName);
-    perror(": ConnectToTcpAddr: setsockopt");
+    err = errno;
     close(sock);
+    errno = err;
     return -1;
   }
 
@@ -438,14 +441,12 @@ SetNonBlocking(int sock)
   int one = 1;
 
   if (ioctl(sock, FIONBIO, &one) < 0) {
-    fprintf(stderr, "%s", programName);
-    perror(": AcceptTcpConnection: ioctl(FIONBIO)");
+    ConnError("Cannot set the socket non-blocking: %s", strerror(errno));
     return False;
   }
 #else
   if (fcntl(sock, F_SETFL, O_NONBLOCK) < 0) {
-    fprintf(stderr, "%s", programName);
-    perror(": AcceptTcpConnection: fcntl");
+    ConnError("Cannot set the socket non-blocking: %s", strerror(errno));
     return False;
   }
 #endif

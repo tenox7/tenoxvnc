@@ -204,8 +204,12 @@ DlgBuild(Bool withOptions)
   }
 
   /* Size from what was actually laid out, so nothing can be clipped by a
-     width guessed in advance. */
+     width guessed in advance.  The message is drawn rather than laid out as
+     an item, so it has to be measured here or a long one would be cut off. */
   dlg.w = XwContentWidth(&dlg) + pad;
+
+  if (dlg.message && dlg.w < pad * 2 + XwStrW(dlg.message))
+    dlg.w = pad * 2 + XwStrW(dlg.message);
 
   y += xwLineH / 2;
   {
@@ -284,6 +288,27 @@ DoConnectDialog(const char *message)
 
   connectDialogUsed = True;
   return XtNewString(dlgHost);
+}
+
+
+/*
+ * AskForServer puts the connection dialog up with message above the fields
+ * and keeps it up until what was typed parses as a server name.
+ */
+
+void
+AskForServer(const char *message)
+{
+  for (;;) {
+    char *name = DoConnectDialog(message);
+    Bool ok = SetServerName(name);
+
+    XtFree(name);
+    if (ok)
+      return;
+
+    message = connError;
+  }
 }
 
 

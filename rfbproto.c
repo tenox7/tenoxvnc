@@ -218,18 +218,25 @@ ConnectToRFBServer(const char *hostname, int port)
   unsigned int host;
 
   if (!StringToIPAddr(hostname, &host)) {
-    fprintf(stderr,"Couldn't convert '%s' to host address\n", hostname);
+    ConnError("Unknown VNC server host \"%.60s\"", hostname);
     return False;
   }
 
   rfbsock = ConnectToTcpAddr(host, port);
 
   if (rfbsock < 0) {
-    fprintf(stderr,"Unable to connect to VNC server\n");
+    ConnError("Unable to connect to %.60s:%d: %s", hostname, port,
+	      strerror(errno));
     return False;
   }
 
-  return SetNonBlocking(rfbsock);
+  if (!SetNonBlocking(rfbsock)) {
+    close(rfbsock);
+    rfbsock = -1;
+    return False;
+  }
+
+  return True;
 }
 
 
@@ -276,6 +283,15 @@ InitialiseRFBConnection(void)
 
   StatsInit();
 
+  /* A retry after a failed attempt starts from scratch: anything the last
+     server left buffered, or told us about itself, is not ours to reuse. */
+  ResetReadBuffer();
+  tightVncProtocol = False;
+  if (desktopName) {
+    free(desktopName);
+    desktopName = NULL;
+  }
+
   /* reset TigerVNC extensions state for this session */
   supportsSetDesktopSize = False;
   pendingDesktopResize = False;
@@ -304,7 +320,7 @@ InitialiseRFBConnection(void)
 
   if (sscanf(pv, rfbProtocolVersionFormat,
 	     &server_major, &server_minor) != 2) {
-    fprintf(stderr,"Not a valid VNC server\n");
+    ConnError("Not a VNC server");
     return False;
   }
 
@@ -363,7 +379,7 @@ InitialiseRFBConnection(void)
       return False;
     break;
   default:                      /* should never happen */
-    fprintf(stderr, "Internal error: Invalid security type\n");
+    ConnError("Internal error: invalid security type");
     return False;
   }
 
@@ -383,15 +399,15 @@ InitialiseRFBConnection(void)
   si.nameLength = Swap32IfLE(si.nameLength);
 
   if (!RfbValidServerStringLength(si.nameLength, 1)) {
-    fprintf(stderr, "Desktop name length too large (%lu bytes)\n",
-            (unsigned long)si.nameLength);
+    ConnError("Desktop name length too large (%lu bytes)",
+	      (unsigned long)si.nameLength);
     return False;
   }
 
   desktopName = malloc(si.nameLength + 1);
   if (!desktopName) {
-    fprintf(stderr, "Error allocating memory for desktop name, %lu bytes\n",
-            (unsigned long)si.nameLength);
+    ConnError("Error allocating memory for desktop name, %lu bytes",
+	      (unsigned long)si.nameLength);
     return False;
   }
 
@@ -436,8 +452,7 @@ ReadSecurityType(void)
   }
 
   if (secType != rfbSecTypeNone && secType != rfbSecTypeVncAuth) {
-    fprintf(stderr, "Unknown security type from RFB server: %d\n",
-            (int)secType);
+    ConnError("Unknown security type from the VNC server: %d", (int)secType);
     return rfbSecTypeInvalid;
   }
 
@@ -502,7 +517,7 @@ SelectSecurityType(void)
   free(secTypes);
 
   if (secType == rfbSecTypeInvalid)
-    fprintf(stderr, "Server did not offer supported security type\n");
+    ConnError("Server did not offer a security type we support");
 
   return (int)secType;
 }
@@ -582,12 +597,12 @@ PerformAuthenticationTight(void)
     case rfbAuthVNC:
       return AuthenticateVNC();
     default:                      /* should never happen */
-      fprintf(stderr, "Internal error: Invalid authentication type\n");
+      ConnError("Internal error: invalid authentication type");
       return False;
     }
   }
 
-  fprintf(stderr, "No suitable authentication schemes offered by server\n");
+  ConnError("Server did not offer an authentication scheme we support");
   return False;
 }
 
@@ -632,8 +647,8 @@ AuthenticateVNC(void)
   if (appData.passwordFile) {
     passwd = vncDecryptPasswdFromFile(appData.passwordFile);
     if (!passwd) {
-      fprintf(stderr, "Cannot read valid password from file \"%s\"\n",
-	      appData.passwordFile);
+      ConnError("Cannot read a valid password from file \"%.50s\"",
+		appData.passwordFile);
       return False;
     }
   } else if (appData.autoPass) {
@@ -662,7 +677,7 @@ AuthenticateVNC(void)
   }
 
   if (!passwd || strlen(passwd) == 0) {
-    fprintf(stderr, "Reading password failed\n");
+    ConnError("Reading the password failed");
     return False;
   }
   if (strlen(passwd) > 8) {
@@ -702,17 +717,16 @@ ReadAuthenticationResult(void)
     if (protocolMinorVersion >= 8) {
       ReadConnFailedReason();
     } else {
-      fprintf(stderr, "Authentication failure\n");
+      ConnError("Authentication failure");
     }
     authFailed = True;
     return False;
   case rfbAuthTooMany:
-    fprintf(stderr, "Authentication failure, too many tries\n");
+    ConnError("Authentication failure, too many tries");
     authFailed = True;
     return False;
   default:
-    fprintf(stderr, "Unknown result of authentication (%d)\n",
-	    (int)authResult);
+    ConnError("Unknown result of authentication (%d)", (int)authResult);
     return False;
   }
 
@@ -2056,17 +2070,22 @@ ReadConnFailedReason(void)
   if (ReadFromRFBServer((char *)&reasonLen, sizeof(reasonLen))) {
     reasonLen = Swap32IfLE(reasonLen);
     if (!RfbValidServerStringLength(reasonLen, 0)) {
-      fprintf(stderr, "Connection failure reason too long (%lu bytes)\n",
-              (unsigned long)reasonLen);
-    } else if ((reason = malloc(reasonLen)) != NULL &&
+      ConnError("Connection failure reason too long (%lu bytes)",
+		(unsigned long)reasonLen);
+      return;
+    }
+    if ((reason = malloc(reasonLen)) != NULL &&
         ReadFromRFBServer(reason, reasonLen)) {
-      fprintf(stderr,"%.*s\n", (int)reasonLen, reason);
+      /* The server writes this text, so only as much of it as the dialog
+	 can hold is worth passing on. */
+      ConnError("%.*s", (int)(reasonLen < CONN_ERROR_LEN ?
+			       reasonLen : CONN_ERROR_LEN - 1), reason);
       free(reason);
       return;
     }
   }
 
-  fprintf(stderr, "VNC connection failed\n");
+  ConnError("VNC connection failed");
 
   if (reason != NULL)
     free(reason);

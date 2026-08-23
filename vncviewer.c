@@ -128,26 +128,37 @@ main(int argc, char **argv)
      given VNC server, and initialise the VNC connection, which includes
      reading the password.
 
-     A rejected password is worth a second chance when the connection dialog
-     is in play: the server drops the connection at that point, so the retry
-     has to redial from scratch. */
+     Anything that goes wrong here - an unknown host, a refused or timed out
+     connection, something that is not a VNC server, a rejected password - is
+     worth a second chance when the connection dialog is in play: it goes
+     back up with the message above the fields.  The server has dropped us by
+     then, so the retry redials from scratch.  Started from the command line
+     there is nobody to show a dialog to, so a failure is fatal as it was. */
 
   if (listenSpecified) {
     if (!InitialiseRFBConnection()) exit(1);
   } else {
     while (1) {
-      if (!ConnectToRFBServer(vncServerHost, vncServerPort)) exit(1);
-
+      connError[0] = '\0';
       authFailed = False;
-      if (InitialiseRFBConnection())
-	break;
 
-      if (!authFailed || !connectDialogUsed)
+      if (ConnectToRFBServer(vncServerHost, vncServerPort)) {
+	if (InitialiseRFBConnection())
+	  break;
+	close(rfbsock);
+	rfbsock = -1;
+      }
+
+      if (!connectDialogUsed)
 	exit(1);
 
-      close(rfbsock);
-      ForgetPassword();
-      SetServerName(DoConnectDialog("Authentication failed - try again."));
+      if (authFailed) {
+	ForgetPassword();
+	AskForServer("Authentication failed - try again.");
+	continue;
+      }
+
+      AskForServer(connError[0] ? connError : "Unable to connect.");
     }
   }
 

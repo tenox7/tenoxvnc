@@ -32,11 +32,15 @@
 #include <sys/select.h>	/* AIX keeps fd_set here, not in types.h/time.h */
 #include <strings.h>	/* FD_ZERO expands to bzero() */
 #endif
-/* SunOS 4 libc is BSD: no ANSI memmove, but bcopy is defined to handle
-   overlapping copies.  Its headers prototype neither. */
+/* SunOS 4 libc is BSD: no ANSI memmove or strerror, but bcopy is defined to
+   handle overlapping copies and sys_errlist is what perror prints.  Its
+   headers prototype none of them. */
 #if defined(sun) && !defined(__SVR4) && !defined(__svr4__)
 void bcopy();
 #define memmove(d, s, n) bcopy((s), (d), (n))
+extern char *sys_errlist[];
+extern int sys_nerr;
+#define strerror(e) ((e) > 0 && (e) < sys_nerr ? sys_errlist[e] : "I/O error")
 #endif
 #include <unistd.h>
 #include <pwd.h>
@@ -173,7 +177,7 @@ extern int numCmdLineOptions;
 extern void removeArgs(int *argc, char** argv, int idx, int nargs);
 extern void usage(void);
 extern void GetArgsAndResources(int argc, char **argv);
-extern void SetServerName(char *vncServerName);
+extern Bool SetServerName(char *vncServerName);
 
 /* color.c */
 
@@ -248,6 +252,7 @@ extern void CancelDialog(Widget w, XEvent *event, String *params,
 			 Cardinal *num_params);
 extern char *DoConnectDialog(const char *message);
 extern char *DoPasswordDialog();
+extern void AskForServer(const char *message);
 extern void ForgetPassword(void);
 
 /* fullscreen.c */
@@ -279,6 +284,13 @@ extern void RunCommand(Widget w, XEvent *event, String *params,
 extern void Quit(Widget w, XEvent *event, String *params,
 		 Cardinal *num_params);
 extern void Cleanup();
+
+/* Whatever went wrong with the last connection attempt, ready to be shown in
+   the connection dialog.  Empty when nothing has failed yet. */
+#define CONN_ERROR_LEN 96
+extern char connError[CONN_ERROR_LEN];
+
+extern void ConnError(const char *format, ...);
 
 extern Bool RfbMulSize(size_t a, size_t b, size_t c, size_t *result);
 extern Bool RfbCheckAddSize(size_t base, size_t extra, size_t *result);
@@ -534,6 +546,7 @@ extern void ShmCleanup();
 
 extern Bool errorMessageOnReadFailure;
 
+extern void ResetReadBuffer(void);
 extern Bool ReadFromRFBServer(char *out, unsigned int n);
 extern Bool ReadFromRFBServerPeek(char **ptr, unsigned int max,
 				  unsigned int *len);

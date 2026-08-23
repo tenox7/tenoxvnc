@@ -24,6 +24,7 @@
 #include <vncviewer.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #ifdef __VMS
 #include <lib$routines.h>	/* lib$wait - see Msleep below */
 #endif
@@ -36,6 +37,39 @@ static int CleanupXIOErrorHandler(Display *dpy);
 #endif
 static void CleanupXtErrorHandler(String message) _X_NORETURN;
 static Bool IconifyNamedWindow(Window w, char *name, Bool undo);
+
+char connError[CONN_ERROR_LEN];
+
+/*
+ * ConnError prints a message the way the viewer always has and keeps a copy
+ * of it, so that anything that goes wrong while a connection is being made
+ * can be put back up in the connection dialog rather than only on a console
+ * nobody is looking at.  The copy is truncated to what the dialog can show.
+ */
+
+void
+ConnError(const char *format, ...)
+{
+  char msg[1024];
+  va_list args;
+  int i;
+
+  va_start(args, format);
+  vsprintf(msg, format, args);
+  va_end(args);
+
+  fprintf(stderr, "%s\n", msg);
+
+  strncpy(connError, msg, CONN_ERROR_LEN - 1);
+  connError[CONN_ERROR_LEN - 1] = '\0';
+
+  /* Part of the text can come from the server, and the dialog draws it as a
+     single line of plain ASCII. */
+  for (i = 0; connError[i]; i++)
+    if ((unsigned char)connError[i] < 0x20 || (unsigned char)connError[i] >= 0x7F)
+      connError[i] = ' ';
+}
+
 
 /*
  * Overflow-checked size_t arithmetic for server-derived allocation sizes.

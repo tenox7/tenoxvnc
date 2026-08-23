@@ -461,32 +461,36 @@ GetArgsAndResources(int argc, char **argv)
   }
 
   if (argc == 1) {
-    vncServerName = DoConnectDialog(NULL);
     appData.passwordDialog = True;
-  } else if (argc != 2) {
-    usage();
-  } else {
-    vncServerName = argv[1];
-    PrintBanner();
-
-    if (!isatty(0))
-      appData.passwordDialog = True;
-    if (vncServerName[0] == '-')
-      usage();
+    AskForServer(NULL);
+    return;
   }
 
-  SetServerName(vncServerName);
+  if (argc != 2)
+    usage();
+
+  vncServerName = argv[1];
+  PrintBanner();
+
+  if (!isatty(0))
+    appData.passwordDialog = True;
+  if (vncServerName[0] == '-')
+    usage();
+
+  if (!SetServerName(vncServerName))
+    usage();
 }
 
 
 /*
  * SetServerName splits "host", "host:display" or "host::port" into
  * vncServerHost and vncServerPort.  Split out of GetArgsAndResources so that
- * the connection dialog can set a different server when a failed
- * authentication is retried.
+ * the connection dialog can set a different server when an attempt is
+ * retried; it returns False rather than quitting, so that what was typed
+ * into the dialog can be corrected there.
  */
 
-void
+Bool
 SetServerName(char *vncServerName)
 {
   char *colonPos;
@@ -494,8 +498,8 @@ SetServerName(char *vncServerName)
   int disp;
 
   if (strlen(vncServerName) > 255) {
-    fprintf(stderr,"VNC server name too long\n");
-    exit(1);
+    ConnError("VNC server name too long");
+    return False;
   }
 
   colonPos = strchr(vncServerName, ':');
@@ -515,11 +519,14 @@ SetServerName(char *vncServerName)
       portOffset = 0;
     }
     if (!len || (int) strspn(colonPos + 1, "0123456789") != len) {
-      usage();
+      ConnError("Server must be host, host:display or host::port");
+      return False;
     }
     disp = atoi(colonPos + 1);
     if (portOffset != 0 && disp >= 100)
       portOffset = 0;
     vncServerPort = disp + portOffset;
   }
+
+  return True;
 }
