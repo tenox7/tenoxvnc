@@ -539,6 +539,9 @@ typedef struct _rfbScreenInfo {
 #define rfbEncodingQualityLevel8   0xFFFFFFE8
 #define rfbEncodingQualityLevel9   0xFFFFFFE9
 
+/* TigerVNC chroma subsampling; "gray" makes the server JPEG every rect */
+#define rfbEncodingSubsampGray     0xFFFFFD03
+
 /* signatures for "fake" encoding types */
 #define sig_rfbEncodingCompressLevel0  "COMPRLVL"
 #define sig_rfbEncodingXCursor         "X11CURSR"

@@ -850,6 +850,9 @@ SetFormatAndEncodings()
 					  rfbEncodingQualityLevel0);
     }
 
+    if (se->nEncodings < MAX_ENCODINGS && requestQualityLevel && appData.forceJPEG)
+      encs[se->nEncodings++] = Swap32IfLE(rfbEncodingSubsampGray);
+
     if (appData.useRemoteCursor) {
       if (se->nEncodings < MAX_ENCODINGS)
 	encs[se->nEncodings++] = Swap32IfLE(rfbEncodingXCursor);
@@ -920,6 +923,8 @@ SetFormatAndEncodings()
 	appData.qualityLevel = 5;
       encs[se->nEncodings++] = Swap32IfLE(appData.qualityLevel +
 					  rfbEncodingQualityLevel0);
+      if (appData.forceJPEG)
+	encs[se->nEncodings++] = Swap32IfLE(rfbEncodingSubsampGray);
     }
 
     if (appData.useRemoteCursor) {

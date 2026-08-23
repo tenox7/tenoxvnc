@@ -192,6 +192,9 @@ static XtResource appDataResourceList[] = {
   {"enableJPEG", "EnableJPEG", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, enableJPEG), XtRImmediate, (XtPointer) True},
 
+  {"forceJPEG", "ForceJPEG", XtRBool, sizeof(Bool),
+   XtOffsetOf(AppData, forceJPEG), XtRImmediate, (XtPointer) False},
+
   {"useRemoteCursor", "UseRemoteCursor", XtRBool, sizeof(Bool),
    XtOffsetOf(AppData, useRemoteCursor), XtRImmediate, (XtPointer) True},
 
@@ -247,6 +250,7 @@ XrmOptionDescRec cmdLineOptions[] = {
   {"-compresslevel", "*compressLevel",      XrmoptionSepArg, 0},
   {"-quality",       "*qualityLevel",       XrmoptionSepArg, 0},
   {"-nojpeg",        "*enableJPEG",         XrmoptionNoArg,  "False"},
+  {"-forcejpeg",     "*forceJPEG",          XrmoptionNoArg,  "True"},
   {"-nocursorshape", "*useRemoteCursor",    XrmoptionNoArg,  "False"},
   {"-x11cursor",     "*useX11Cursor",       XrmoptionNoArg,  "True"},
   {"-hwcursor",      "*useHardwareCursor",  XrmoptionNoArg,  "True"},
@@ -394,6 +398,7 @@ usage(void)
 	  "        -compresslevel <COMPRESS-VALUE> (0..9: 0-fast, 9-best)\n"
 	  "        -quality <JPEG-QUALITY-VALUE> (0..9: 0-low, 9-high)\n"
 	  "        -nojpeg\n"
+	  "        -forcejpeg (grayscale; TigerVNC servers only)\n"
 	  "        -nocursorshape\n"
 	  "        -x11cursor\n"
 	  "        -hwcursor | -nohwcursor (X server draws 2-color remote cursors)\n"

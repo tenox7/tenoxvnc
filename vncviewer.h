@@ -143,6 +143,7 @@ typedef struct {
   int compressLevel;
   int qualityLevel;
   Bool enableJPEG;
+  Bool forceJPEG;
   Bool useRemoteCursor;
   Bool useX11Cursor;
   Bool useHwCursor;		/* let the X server draw 2-color remote cursors */
