@@ -153,8 +153,11 @@ osr6:
 	$(MAKE) CC=/udk/usr/ccs/bin/cc CFLAGS="-O -I/usr/X11R6/include $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-L/usr/X11R6/lib -lXt -lSM -lICE -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
+# DEC C defaults to K&R mode on V4.0 and leaves __STDC__ undefined, so zlib.h
+# #defines const away and every prototype using it stops matching its
+# definition.  -std is DEC C's relaxed ANSI mode, the analogue of HP's -Ae.
 osf1:
-	$(MAKE) CC=cc CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
+	$(MAKE) CC=cc CFLAGS="-std -O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
 # MIPSpro cc, -woff mutes unused-variable warnings. mips3 runs on any 6.5 box,
