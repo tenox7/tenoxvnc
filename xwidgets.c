@@ -287,6 +287,19 @@ XwAddSep(XwPanel *p, int x, int y, int w)
   return XwAdd(p, XW_SEP, NULL, x, y, w, 2);
 }
 
+/*
+ * A group is the frame drawn round a section of a panel, with its title let
+ * into the top edge.  It is added before the controls it encloses, so that
+ * they are drawn over it, and its size is usually filled in afterwards, once
+ * the layout inside it has settled.
+ */
+
+XwItem *
+XwAddGroup(XwPanel *p, const char *title, int x, int y, int w, int h)
+{
+  return XwAdd(p, XW_GROUP, title, x, y, w, h);
+}
+
 int
 XwContentWidth(XwPanel *p)
 {
@@ -351,6 +364,27 @@ XwDrawItem(XwPanel *p, int i)
     XSetForeground(dpy, p->gc, xwLight);
     XDrawLine(dpy, p->buf, p->gc, it->x, it->y + 1,
 	      it->x + it->w - 1, it->y + 1);
+    break;
+
+  case XW_GROUP:
+    /* One frame inside the other, the outer sunken and the inner raised,
+       makes the groove that reads as an outline rather than as a box that
+       could be pressed.  The title is then laid across the top edge, with
+       just the two lines behind it rubbed out. */
+    XwFrame(p, it->x, it->y, it->w, it->h, True);
+    XwFrame(p, it->x + 1, it->y + 1, it->w - 2, it->h - 2, False);
+
+    if (!it->label)
+      break;
+
+    tx = it->x + xwCharW + xwCharW / 2;
+    n = XwStrW(it->label);
+    XSetForeground(dpy, p->gc, xwBg);
+    XFillRectangle(dpy, p->buf, p->gc, tx - xwCharW / 2, it->y,
+		   n + xwCharW, 2);
+    XSetForeground(dpy, p->gc, xwFg);
+    XDrawString(dpy, p->buf, p->gc, tx, it->y + xwFont->ascent / 2,
+		it->label, strlen(it->label));
     break;
 
   case XW_TEXT:

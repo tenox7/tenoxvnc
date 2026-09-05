@@ -21,9 +21,9 @@
  * xwidgets.h - the small set of controls the viewer draws for itself.
  *
  * Enough of a toolkit for the connection dialog and the F8 menu: labels,
- * text fields, checkboxes, radio buttons, push buttons, sliders and
- * separators, drawn with Xlib on a bare Xt core widget, so the viewer needs
- * nothing beyond Xt itself.
+ * text fields, checkboxes, radio buttons, push buttons, sliders, separators
+ * and the frames round a group of them, drawn with Xlib on a bare Xt core
+ * widget, so the viewer needs nothing beyond Xt itself.
  *
  * A panel owns its items, so the F8 menu can stay around between uses while
  * a modal dialog comes and goes.
@@ -41,7 +41,8 @@ enum {				/* item kinds */
   XW_RADIO,
   XW_BUTTON,
   XW_SLIDER,
-  XW_SEP
+  XW_SEP,
+  XW_GROUP
 };
 
 typedef struct {
@@ -123,6 +124,8 @@ extern XwItem *XwAddButton(XwPanel *p, const char *s, int id, int x, int y);
 extern XwItem *XwAddSlider(XwPanel *p, int *value, const int *vals, int nvals,
 			   Bool autoFirst, int x, int y, int w);
 extern XwItem *XwAddSep(XwPanel *p, int x, int y, int w);
+extern XwItem *XwAddGroup(XwPanel *p, const char *title, int x, int y,
+			  int w, int h);
 extern int XwContentWidth(XwPanel *p);
 
 extern void XwBuildWindow(XwPanel *p, const char *name, const char *title,

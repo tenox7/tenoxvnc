@@ -21,8 +21,10 @@
 /*
  * popup.c - the F8 menu, drawn with xwidgets.
  *
- * A panel the viewer draws itself: the two things that can be on or off are
- * checkboxes showing the real state, the rest are buttons.
+ * A panel the viewer draws itself: a framed section for each thing the menu
+ * deals with, the settings that can be on or off as checkboxes showing the
+ * real state, everything else as buttons, and the two that finish with the
+ * menu in a row along the bottom.
  *
  * Everything here still goes through the Xt actions in the table in
  * argsresources.c, so all of it remains available to bind to a key with
@@ -105,83 +107,156 @@ SendKeyCombo(const char *k1, const char *k2, const char *k3)
 }
 
 
+/*
+ * Layout.  Inside a section everything sits in one of two columns of equal
+ * width, so the controls line up down the whole menu however wide the font
+ * makes them.  None of those widths are known while the items are being
+ * added, so each one is marked with what it wants instead and the lot is
+ * stretched to fit at the end - the way the connection dialog settles the
+ * width of its sliders.
+ */
+
+#define S_FRAME	1		/* a section frame: the full panel width */
+#define S_COL	2		/* one column, and has a say in how wide it is */
+#define S_SPAN	4		/* both columns */
+#define S_RIGHT	8		/* belongs in the second column */
+
+static int stretch[XW_MAXITEMS];
+static int section;		/* frame of the section being filled in */
+
+static void
+Mark(int how)
+{
+  stretch[menu.nItems - 1] = how;
+}
+
+static int
+SectionStart(const char *title, int y)
+{
+  XwAddGroup(&menu, title, 0, y, 1, 1);
+  section = menu.nItems - 1;
+  Mark(S_FRAME);
+
+  return y + xwLineH + 2;	/* clear of the title let into the top edge */
+}
+
+static int
+SectionEnd(int y)
+{
+  y += xwLineH / 3;
+  menu.items[section].h = y - menu.items[section].y;
+
+  return y + xwLineH / 2;
+}
+
+
 static void
 MenuBuild(void)
 {
-  int pad = xwCharW * 2;
-  int y = pad, rowH = xwLineH + 6;
-  int w, sep1, sep2;
+  int pad = xwCharW * 2;	/* panel edge to a section frame */
+  int gin = xwCharW + xwCharW / 2;	/* frame to the controls inside it */
+  int gap = xwCharW;		/* between the two columns */
+  int rowH = xwLineH + 6;
+  int col1 = pad + gin;
+  int y = pad;
+  int bw, inner, i;
+  int diagW = XwStrW("Diagnostics...") + 4 * xwCharW;
+  int dismissW = XwStrW("Dismiss") + 4 * xwCharW;
+  int quitW = XwStrW("Quit viewer") + 4 * xwCharW;
 
   XwReset(&menu);
+  memset(stretch, 0, sizeof(stretch));
 
   /* The checkboxes point straight at the viewer's own state rather than at
      copies, so what they show cannot drift from what is really set. */
 
-  XwAddCheck(&menu, "Full screen", &appData.fullScreen, P_FULLSCREEN, pad, y);
-  y += rowH;
-  cuItem = menu.nItems;
-  XwAddCheck(&menu, "Continuous updates", &cuActive, P_CONTINUOUS, pad, y);
+  y = SectionStart("Screen", y);
+  XwAddCheck(&menu, "Full screen", &appData.fullScreen, P_FULLSCREEN, col1, y);
+  Mark(S_COL);
+  menu.focus = menu.nItems - 1;
+  XwAddCheck(&menu, "Continuous updates", &cuActive, P_CONTINUOUS, col1, y);
+  Mark(S_COL | S_RIGHT);
+  cuItem = menu.nItems - 1;
   menu.items[cuItem].disabled = !supportsCU;
   y += rowH;
+  XwAddButton(&menu, "Repaint screen", P_REPAINT, col1, y);
+  Mark(S_COL);
+  XwAddButton(&menu, "Request refresh", P_REFRESH, col1, y);
+  Mark(S_COL | S_RIGHT);
+  y = SectionEnd(y + rowH);
 
+  y = SectionStart("Cursor", y);
   sprintf(cursorLabel, "Local cursor: %s", LocalCursorName());
-  cursorItem = menu.nItems;
-  XwAddButton(&menu, cursorLabel, P_CURSOR, pad, y);
+  XwAddButton(&menu, cursorLabel, P_CURSOR, col1, y);
+  Mark(S_SPAN);
+  cursorItem = menu.nItems - 1;
   y += rowH;
-
   XwAddCheck(&menu, "X server draws remote cursor", &appData.useHwCursor,
-	     P_HWCURSOR, pad, y);
-  y += rowH + 2;
+	     P_HWCURSOR, col1, y);
+  Mark(S_SPAN);
+  y = SectionEnd(y + xwLineH);
 
-  /* separators are stretched to the finished width further down */
-  sep1 = menu.nItems;
-  XwAddSep(&menu, pad, y, 1);
-  y += 6;
+  y = SectionStart("Clipboard", y);
+  XwAddButton(&menu, "Local -> remote", P_CLIP_OUT, col1, y);
+  Mark(S_COL);
+  XwAddButton(&menu, "Local <- remote", P_CLIP_IN, col1, y);
+  Mark(S_COL | S_RIGHT);
+  y = SectionEnd(y + rowH);
 
-  XwAddButton(&menu, "Clipboard: local -> remote", P_CLIP_OUT, pad, y);
-  y += rowH;
-  XwAddButton(&menu, "Clipboard: local <- remote", P_CLIP_IN, pad, y);
-  y += rowH;
-  XwAddButton(&menu, "Request refresh", P_REFRESH, pad, y);
-  y += rowH;
-  XwAddButton(&menu, "Repaint screen", P_REPAINT, pad, y);
-  y += rowH;
-  XwAddButton(&menu, "Send ctrl-alt-del", P_CTRLALTDEL, pad, y);
-  y += rowH;
-  XwAddButton(&menu, "Send F8", P_SENDF8, pad, y);
-  y += rowH;
+  y = SectionStart("Send keys", y);
+  XwAddButton(&menu, "Ctrl-Alt-Del", P_CTRLALTDEL, col1, y);
+  Mark(S_COL);
+  XwAddButton(&menu, "F8", P_SENDF8, col1, y);
+  Mark(S_COL | S_RIGHT);
+  y = SectionEnd(y + rowH);
+
+  /* One width for every button in a column, wide enough for the widest of
+     them and for the checkboxes sharing the columns with them. */
+  bw = 0;
+  for (i = 0; i < menu.nItems; i++)
+    if ((stretch[i] & S_COL) && menu.items[i].w > bw)
+      bw = menu.items[i].w;
+
+  inner = bw * 2 + gap;
+
+  for (i = 0; i < menu.nItems; i++)
+    if ((stretch[i] & S_SPAN) && menu.items[i].w > inner)
+      inner = menu.items[i].w;
+
+  /* The bottom row runs the full width of the panel, frames and all, so it
+     needs less of the inside of a section than its own width. */
+  if (inner < diagW + dismissW + quitW + gap * 2 - gin * 2)
+    inner = diagW + dismissW + quitW + gap * 2 - gin * 2;
+
+  bw = (inner - gap) / 2;
+  menu.w = col1 + inner + gin + pad;
+
+  for (i = 0; i < menu.nItems; i++) {
+    if (stretch[i] & S_FRAME) {
+      menu.items[i].x = pad;
+      menu.items[i].w = menu.w - pad * 2;
+    }
+    if (menu.items[i].kind == XW_BUTTON) {
+      if (stretch[i] & S_COL)
+	menu.items[i].w = bw;
+      if (stretch[i] & S_SPAN)
+	menu.items[i].w = inner;
+    }
+    if (stretch[i] & S_RIGHT)
+      menu.items[i].x = col1 + bw + gap;
+  }
+
+  /* Diagnostics opens a window of its own, so it keeps the left of the
+     bottom row and the two that finish with the menu sit at the right. */
   XwAddButton(&menu, "Diagnostics...", P_STATS, pad, y);
 #ifndef VNCSTATS
   menu.items[menu.nItems - 1].disabled = True;	/* not compiled in */
 #endif
-  y += rowH;
+  XwAddButton(&menu, "Dismiss", P_DISMISS,
+	      menu.w - pad - quitW - gap - dismissW, y);
+  XwAddButton(&menu, "Quit viewer", P_QUIT, menu.w - pad - quitW, y);
 
-  y += 2;
-  sep2 = menu.nItems;
-  XwAddSep(&menu, pad, y, 1);
-  y += 8;
-
-  w = XwContentWidth(&menu);
-
-  {
-    int dw = XwStrW("Dismiss") + 4 * xwCharW;
-    int qw = XwStrW("Quit viewer") + 4 * xwCharW;
-
-    menu.w = w + pad;
-    if (menu.w < pad * 2 + dw + qw + xwCharW * 2)
-      menu.w = pad * 2 + dw + qw + xwCharW * 2;
-
-    XwAddButton(&menu, "Dismiss", P_DISMISS, pad, y);
-    XwAddButton(&menu, "Quit viewer", P_QUIT, menu.w - pad - qw, y);
-    y += xwLineH + 6;
-  }
-
-  /* now that the width is settled, run the separators the full way across */
-  menu.items[sep1].w = menu.w - pad * 2;
-  menu.items[sep2].w = menu.w - pad * 2;
-
-  menu.h = y + pad;
-  menu.focus = 0;
+  menu.h = y + rowH + pad;
 }
 
 
