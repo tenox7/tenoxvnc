@@ -192,6 +192,8 @@ extern Visual *vis;
 extern unsigned int visdepth, visbpp;
 
 extern void SetVisualAndCmap();
+extern void ReloadColorFormat(void);
+extern Bool ColorLevelSettable(void);
 extern const char *ColorModeName(void);
 
 /* cursor.c */
@@ -202,6 +204,7 @@ extern Bool HandleCursorPos(int x, int y);
 extern void SoftCursorLockArea(int x, int y, int w, int h);
 extern void SoftCursorUnlockScreen(void);
 extern void SoftCursorMove(int x, int y);
+extern void ForgetRemoteCursor(void);
 extern void ToggleHardwareCursor(Widget w, XEvent *event, String *params,
 				 Cardinal *num_params);
 
@@ -241,6 +244,7 @@ extern void SetLocalCursorState(Widget w, XEvent *event, String *params,
 extern const char *LocalCursorName(void);
 extern void SynchroniseScreen();
 extern void ResizeDesktopFramebuffer(int width, int height);
+extern void RebuildDesktopFramebuffer(void);
 extern void TrackDesktopResizes(void);
 extern void DesktopSizeSupportLearned(void);
 
@@ -252,6 +256,7 @@ extern void CancelDialog(Widget w, XEvent *event, String *params,
 			 Cardinal *num_params);
 extern char *DoConnectDialog(const char *message);
 extern char *DoPasswordDialog();
+extern Bool DoSettingsDialog(void);
 extern void AskForServer(const char *message);
 extern void ForgetPassword(void);
 
@@ -340,6 +345,8 @@ extern Bool cuActive;
 extern Bool ConnectToRFBServer(const char *hostname, int port);
 extern Bool InitialiseRFBConnection();
 extern Bool SetFormatAndEncodings();
+extern Bool SendPixelFormat();
+extern Bool SendEncodings();
 extern const char *EncodingName(CARD32 enc);
 extern Bool SendIncrementalFramebufferUpdateRequest();
 extern Bool SendFramebufferUpdateRequest(int x, int y, int w, int h,
@@ -356,6 +363,7 @@ extern void SetContinuousUpdatesState(Widget w, XEvent *ev, String *params,
 				      Cardinal *num_params);
 extern Bool SendFence(CARD32 flags, int len, char *data);
 extern Bool HandleRFBServerMessage();
+extern void ForgetSessionPassword(void);
 
 extern void PrintPixelFormat(rfbPixelFormat *format);
 
@@ -574,5 +582,9 @@ extern XtAppContext appContext;
 extern Display* dpy;
 extern Widget toplevel;
 
+extern Bool sessionRestartPending;
+
 extern void ProcessPendingXEvents(void);
+extern void ShowSettings(Widget w, XEvent *event, String *params,
+			 Cardinal *num_params);
 extern void PrintBanner(void);

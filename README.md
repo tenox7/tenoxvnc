@@ -36,6 +36,11 @@ Shown when no server is given on the command line.
 - **Own colormap** *(client)* — force PseudoColor with a private colormap.
 - **Depth** *(client)* — X visual depth 8/15/16/24/32, needs True color.
 
+The F8 menu's **Settings...** reopens the same options during a session.
+Encoding, JPEG, quality and compression apply straight away; Shared and Color
+reconnect to the same server; True color, Own colormap and Depth are greyed
+out, since an X visual cannot change under a window that is already up.
+
 ## Supported Platforms
 
 - AIX 4.x; 5.x

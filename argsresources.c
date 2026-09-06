@@ -286,6 +286,7 @@ static XtActionsRec actions[] = {
     {"CycleLocalCursor", CycleLocalCursor},
     {"ToggleHardwareCursor", ToggleHardwareCursor},
     {"SetLocalCursorState", SetLocalCursorState},
+    {"ShowSettings", ShowSettings},
 #ifdef VNCSTATS
     {"ShowStats", ShowStats},
     {"HideStats", HideStats},

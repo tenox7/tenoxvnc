@@ -256,6 +256,31 @@ ResizeDesktopFramebuffer(int width, int height)
   /* hide the soft cursor while the ground shifts under it */
   SoftCursorLockArea(0, 0, si.framebufferWidth, si.framebufferHeight);
 
+  si.framebufferWidth = width;
+  si.framebufferHeight = height;
+
+  RebuildDesktopFramebuffer();
+
+  SoftCursorUnlockScreen();
+}
+
+
+/*
+ * RebuildDesktopFramebuffer throws the local image away and makes a new one
+ * at whatever si now says, then brings the widgets in line with it.  What was
+ * on the screen is lost, so the caller has to ask the server for it again.
+ *
+ * The resize path above is one caller; a reconnect is the other, where the
+ * size may well be the same but the pixel format the image is in has changed
+ * underneath it.
+ */
+
+void
+RebuildDesktopFramebuffer(void)
+{
+  int width = si.framebufferWidth;
+  int height = si.framebufferHeight;
+
 #ifdef MITSHM
   if (imageIsShm) {
     ShmDetachImage(image);
@@ -266,9 +291,6 @@ ResizeDesktopFramebuffer(int width, int height)
     XDestroyImage(image);	/* also frees the malloc'd data */
     image = NULL;
   }
-
-  si.framebufferWidth = width;
-  si.framebufferHeight = height;
 
   CreateDesktopImage();
 
@@ -295,8 +317,6 @@ ResizeDesktopFramebuffer(int width, int height)
 
     XtVaSetValues(toplevel, XtNwidth, w, XtNheight, h, NULL);
   }
-
-  SoftCursorUnlockScreen();
 }
 
 

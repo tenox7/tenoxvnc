@@ -50,6 +50,7 @@ enum {
   P_REPAINT,
   P_CTRLALTDEL,
   P_SENDF8,
+  P_SETTINGS,
   P_STATS,
   P_DISMISS,
   P_QUIT
@@ -160,6 +161,7 @@ MenuBuild(void)
   int col1 = pad + gin;
   int y = pad;
   int bw, inner, i;
+  int setW = XwStrW("Settings...") + 4 * xwCharW;
   int diagW = XwStrW("Diagnostics...") + 4 * xwCharW;
   int dismissW = XwStrW("Dismiss") + 4 * xwCharW;
   int quitW = XwStrW("Quit viewer") + 4 * xwCharW;
@@ -225,8 +227,8 @@ MenuBuild(void)
 
   /* The bottom row runs the full width of the panel, frames and all, so it
      needs less of the inside of a section than its own width. */
-  if (inner < diagW + dismissW + quitW + gap * 2 - gin * 2)
-    inner = diagW + dismissW + quitW + gap * 2 - gin * 2;
+  if (inner < setW + diagW + dismissW + quitW + gap * 3 - gin * 2)
+    inner = setW + diagW + dismissW + quitW + gap * 3 - gin * 2;
 
   bw = (inner - gap) / 2;
   menu.w = col1 + inner + gin + pad;
@@ -246,9 +248,10 @@ MenuBuild(void)
       menu.items[i].x = col1 + bw + gap;
   }
 
-  /* Diagnostics opens a window of its own, so it keeps the left of the
-     bottom row and the two that finish with the menu sit at the right. */
-  XwAddButton(&menu, "Diagnostics...", P_STATS, pad, y);
+  /* The two that open a window of their own keep the left of the bottom row
+     and the two that finish with the menu sit at the right. */
+  XwAddButton(&menu, "Settings...", P_SETTINGS, pad, y);
+  XwAddButton(&menu, "Diagnostics...", P_STATS, pad + setW + gap, y);
 #ifndef VNCSTATS
   menu.items[menu.nItems - 1].disabled = True;	/* not compiled in */
 #endif
@@ -413,6 +416,11 @@ MenuActivate(int id)
   case P_SENDF8:
     HidePopup(NULL, NULL, NULL, NULL);
     SendKeyCombo(NULL, NULL, "F8");
+    return;
+
+  case P_SETTINGS:
+    HidePopup(NULL, NULL, NULL, NULL);
+    RunAction("ShowSettings", NULL, 0);
     return;
 
 #ifdef VNCSTATS

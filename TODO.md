@@ -1,6 +1,10 @@
 # TenoxVNC Roadmap
 
-- Change settings from F8 menu and reconnect (LIVE-CONFIG-SWITCH)
+- Switch the color level in place instead of reconnecting: defer SetPixelFormat
+  to a fence, EndOfContinuousUpdates or end-of-update boundary, then rebuild
+  the colormap and repaint (LIVE-CONFIG-SWITCH)
+- Let True color / Own colormap / Depth change too, which needs the toplevel
+  and desktop widgets destroyed and recreated on the new visual
 - Optimize jpeg for performance
 - Support mondern VNC server auth
 - Fix jpeg fatal error handling: tight.c uses stock jpeg_std_error, whose

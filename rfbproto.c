@@ -59,6 +59,7 @@ static Bool HandleTight16(int rx, int ry, int rw, int rh);
 static Bool HandleTight32(int rx, int ry, int rw, int rh);
 static Bool HandleZRLE(int rx, int ry, int rw, int rh);
 static void ResetZRLEState(void);
+static void ResetDecoders(void);
 
 static void ReadConnFailedReason(void);
 static long ReadCompactLen (void);
@@ -108,6 +109,12 @@ Bool tightVncProtocol = False;
    the connection dialog again rather than just giving up. */
 Bool authFailed = False;
 char titleEncName[16] = "";
+
+/* The password the current server accepted, kept so that a reconnect from
+   the F8 settings panel does not have to ask for it again. */
+static char sessionPasswd[9];
+static Bool sessionPasswdSet = False;
+
 static CapsContainer *tunnelCaps;    /* known tunneling/encryption methods */
 static CapsContainer *authCaps;	     /* known authentication schemes       */
 static CapsContainer *serverMsgCaps; /* known non-standard server messages */
@@ -209,6 +216,34 @@ InitCapabilities(void)
 
 
 /*
+ * ResetDecoders drops every inflate stream, so that a new connection starts
+ * them again from the server's first compressed rectangle.  A zlib stream
+ * runs the length of a connection and carries state across rectangles, so
+ * one left over from the last server would decode the next one to rubbish.
+ */
+
+static void
+ResetDecoders(void)
+{
+  int i;
+
+  if (decompStreamInited) {
+    inflateEnd(&decompStream);
+    decompStreamInited = False;
+  }
+
+  for (i = 0; i < 4; i++) {
+    if (zlibStreamActive[i]) {
+      inflateEnd(&zlibStream[i]);
+      zlibStreamActive[i] = False;
+    }
+  }
+
+  ResetZRLEState();
+}
+
+
+/*
  * ConnectToRFBServer.
  */
 
@@ -303,7 +338,8 @@ InitialiseRFBConnection(void)
   screenFlags = 0;
   nReportedEncs = 0;
   tightJpegReported = False;
-  ResetZRLEState();
+  titleEncName[0] = '\0';
+  ResetDecoders();
 
   /* if the connection is immediately closed, don't report anything, so
        that pmw's monitor can make test connections */
@@ -636,15 +672,25 @@ AuthenticateVNC(void)
   char *passwd;
   char *envpw;
   char  buffer[64];
+  char  pw[9];
   char* cstatus;
   int   len;
+  Bool  ok;
 
   fprintf(stderr, "Performing standard VNC authentication\n");
 
   if (!ReadFromRFBServer((char *)challenge, CHALLENGESIZE))
     return False;
 
-  if (appData.passwordFile) {
+  /* A reconnect from the F8 settings panel authenticates again, and there is
+     nowhere to ask a second time from: a password file is the only source
+     that could be read twice.  So the one that worked is kept for the life of
+     the viewer, and dropped the moment a server refuses it. */
+
+  if (sessionPasswdSet) {
+    memcpy(pw, sessionPasswd, sizeof(pw));
+    passwd = NULL;
+  } else if (appData.passwordFile) {
     passwd = vncDecryptPasswdFromFile(appData.passwordFile);
     if (!passwd) {
       ConnError("Cannot read a valid password from file \"%.50s\"",
@@ -676,23 +722,54 @@ AuthenticateVNC(void)
 #endif
   }
 
-  if (!passwd || strlen(passwd) == 0) {
-    ConnError("Reading the password failed");
+  if (!sessionPasswdSet) {
+    if (!passwd || strlen(passwd) == 0) {
+      ConnError("Reading the password failed");
+      return False;
+    }
+
+    strncpy(pw, passwd, 8);
+    pw[8] = '\0';
+
+    /* Lose the password from wherever it was typed or read */
+    memset(passwd, '\0', strlen(passwd));
+    if (appData.passwordFile)
+      free(passwd);
+  }
+
+  vncEncryptBytes(challenge, pw);
+
+  if (!WriteExact(rfbsock, (char *)challenge, CHALLENGESIZE)) {
+    memset(pw, '\0', sizeof(pw));
     return False;
   }
-  if (strlen(passwd) > 8) {
-    passwd[8] = '\0';
+
+  ok = ReadAuthenticationResult();
+
+  if (ok) {
+    memcpy(sessionPasswd, pw, sizeof(sessionPasswd));
+    sessionPasswdSet = True;
+  } else {
+    ForgetSessionPassword();
   }
 
-  vncEncryptBytes(challenge, passwd);
+  memset(pw, '\0', sizeof(pw));
 
-  /* Lose the password from memory */
-  memset(passwd, '\0', strlen(passwd));
+  return ok;
+}
 
-  if (!WriteExact(rfbsock, (char *)challenge, CHALLENGESIZE))
-    return False;
 
-  return ReadAuthenticationResult();
+/*
+ * ForgetSessionPassword drops the retained password, so that the next
+ * connection asks for one again.  Called when a server refuses it, and from
+ * the connection dialog when it is about to ask for a new one.
+ */
+
+void
+ForgetSessionPassword(void)
+{
+  memset(sessionPasswd, '\0', sizeof(sessionPasswd));
+  sessionPasswdSet = False;
 }
 
 /*
@@ -781,20 +858,26 @@ ReadCapabilityList(CapsContainer *caps, int count)
 
 
 /*
- * SetFormatAndEncodings.
+ * SetFormatAndEncodings, and the two halves it is made of.
+ *
+ * They are separate because the encoding list may be re-sent at any point in
+ * the stream - the server simply uses the new one for the next rectangle it
+ * encodes - while the pixel format may not, since it decides how many bytes
+ * each rectangle occupies.  So the F8 settings panel sends encodings on their
+ * own, and a format change waits for the clean stream boundary a reconnect
+ * gives it.
  */
 
 Bool
 SetFormatAndEncodings()
 {
+  return SendPixelFormat() && SendEncodings();
+}
+
+Bool
+SendPixelFormat()
+{
   rfbSetPixelFormatMsg spf;
-  char buf[sz_rfbSetEncodingsMsg + MAX_ENCODINGS * 4];
-  rfbSetEncodingsMsg *se = (rfbSetEncodingsMsg *)buf;
-  CARD32 *encs = (CARD32 *)(&buf[sz_rfbSetEncodingsMsg]);
-  int len = 0;
-  Bool requestCompressLevel = False;
-  Bool requestQualityLevel = False;
-  Bool requestLastRectEncoding = False;
 
   spf.type = rfbSetPixelFormat;
   spf.format = myFormat;
@@ -804,6 +887,28 @@ SetFormatAndEncodings()
 
   if (!WriteExact(rfbsock, (char *)&spf, sz_rfbSetPixelFormatMsg))
     return False;
+
+  STATS(vncStats.msgsOut++);
+  StatsLog(1, "SetPixelFormat", sz_rfbSetPixelFormatMsg, 0.0);
+
+  return True;
+}
+
+Bool
+SendEncodings()
+{
+  char buf[sz_rfbSetEncodingsMsg + MAX_ENCODINGS * 4];
+  rfbSetEncodingsMsg *se = (rfbSetEncodingsMsg *)buf;
+  CARD32 *encs = (CARD32 *)(&buf[sz_rfbSetEncodingsMsg]);
+  int len = 0;
+  Bool requestCompressLevel = False;
+  Bool requestQualityLevel = False;
+  Bool requestLastRectEncoding = False;
+
+  /* Say again which encoding the server settles on.  Each one is announced
+     only once per connection, so without this a list sent from the settings
+     panel would change what arrives with nothing said about it. */
+  nReportedEncs = 0;
 
   se->type = rfbSetEncodings;
   se->nEncodings = 0;
@@ -1001,8 +1106,7 @@ SetFormatAndEncodings()
 
   if (!WriteExact(rfbsock, buf, len)) return False;
 
-  STATS(vncStats.msgsOut += 2);
-  StatsLog(1, "SetPixelFormat", sz_rfbSetPixelFormatMsg, 0.0);
+  STATS(vncStats.msgsOut++);
   StatsLog(1, "SetEncodings", len, 0.0);
 
   return True;
@@ -1213,6 +1317,10 @@ ToggleContinuousUpdates(Widget w, XEvent *ev, String *params,
     fprintf(stderr, "Server does not support continuous updates\n");
     return;
   }
+
+  /* Keep what was asked for as well as what is in force: the settings panel
+     shows the request, and a reconnect starts from it. */
+  appData.useContinuousUpdates = !cuActive;
 
   if (cuActive) {
     SendEnableContinuousUpdates(False, 0, 0, 0, 0);

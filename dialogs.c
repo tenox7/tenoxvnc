@@ -25,6 +25,10 @@
  * with the options people usually want to change.  The password is held
  * until the server actually asks for it; a server that needs no
  * authentication simply never uses it.
+ *
+ * The same panel without the server and password fields is the settings
+ * dialog the F8 menu opens, so that what can be set before connecting can be
+ * changed afterwards as well.
  */
 
 #include "vncviewer.h"
@@ -35,8 +39,13 @@
 
 enum { RES_CONNECT = 1, RES_CANCEL = 2 };
 
+/* What the panel is being used for.  CONNECT has every field, PASSWORD only
+   the password, SETTINGS only the options. */
+enum { DLG_CONNECT, DLG_PASSWORD, DLG_SETTINGS };
+
 static XwPanel dlg;
 static int passItem;
+static Bool dlgInUse = False;
 
 static char dlgHost[HOST_LEN + 1];
 static char dlgPass[PASS_LEN + 1];
@@ -107,25 +116,38 @@ DlgCellW(const char *const *names, int n)
 
 static int
 DlgRadios(const char *const *names, const int *vals, int n, int *value,
-	  int ncols, int cellW, int x, int y, int rowH)
+	  int ncols, int cellW, int x, int y, int rowH, Bool disabled)
 {
   int i;
 
   for (i = 0; i < n; i++)
     XwAddRadio(&dlg, names[i], value, vals[i],
-	       x + (i % ncols) * cellW, y + (i / ncols) * rowH);
+	       x + (i % ncols) * cellW, y + (i / ncols) * rowH)
+      ->disabled = disabled;
 
   return y + ((n + ncols - 1) / ncols) * rowH;
 }
 
 static void
-DlgBuild(Bool withOptions)
+DlgBuild(int mode)
 {
   int pad = xwCharW * 2;
   int col1 = pad + XwStrW("Password:") + xwCharW;
   int col2, y, rowH = xwLineH + 6;
   int fieldCols = 26;
   int slider[3], i;
+  Bool withOptions = (mode != DLG_PASSWORD);
+  const char *okLabel = (mode == DLG_SETTINGS) ? "Apply" : "Connect";
+
+  /* Three things the settings panel cannot offer.  A visual is fixed for the
+     life of a window, so the settings that pick one are connect time only.
+     The color level is fixed too where a forced visual dictated the format,
+     and both it and the shared flag need a reconnect, which a session we did
+     not dial in the first place has no way to make. */
+  Bool visualFixed = (mode == DLG_SETTINGS);
+  Bool colorFixed = (mode == DLG_SETTINGS) &&
+		    (listenSpecified || !ColorLevelSettable());
+  Bool sessionFixed = (mode == DLG_SETTINGS) && listenSpecified;
 
   XwReset(&dlg);
   passItem = -1;
@@ -134,16 +156,30 @@ DlgBuild(Bool withOptions)
   if (dlg.message)
     y += xwLineH;
 
-  if (withOptions) {
+  if (mode == DLG_CONNECT) {
+    /* A server named on the command line never went through this field, so
+       fill it in from the one we are talking to - a reconnect that has to
+       ask for the password again should not ask for the host as well. */
+    if (dlgHost[0] == '\0' && vncServerHost[0] != '\0') {
+      if (vncServerPort >= SERVER_PORT_OFFSET &&
+	  vncServerPort < SERVER_PORT_OFFSET + 100)
+	sprintf(dlgHost, "%.240s:%d", vncServerHost,
+		vncServerPort - SERVER_PORT_OFFSET);
+      else
+	sprintf(dlgHost, "%.240s::%d", vncServerHost, vncServerPort);
+    }
+
     XwAddLabel(&dlg, "Server:", pad, y + 2);
     XwAddText(&dlg, dlgHost, HOST_LEN, col1, y, fieldCols, False, False);
     y += rowH;
   }
 
-  XwAddLabel(&dlg, "Password:", pad, y + 2);
-  XwAddText(&dlg, dlgPass, PASS_LEN, col1, y, fieldCols, True, False);
-  passItem = dlg.nItems - 1;
-  y += rowH;
+  if (mode != DLG_SETTINGS) {
+    XwAddLabel(&dlg, "Password:", pad, y + 2);
+    XwAddText(&dlg, dlgPass, PASS_LEN, col1, y, fieldCols, True, False);
+    passItem = dlg.nItems - 1;
+    y += rowH;
+  }
 
   if (withOptions) {
     /* The second column has to clear the widest checkbox that shares a row
@@ -154,7 +190,8 @@ DlgBuild(Bool withOptions)
 
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Session:", pad, y);
-    XwAddCheck(&dlg, "Shared", &appData.shareDesktop, 0, col1, y);
+    XwAddCheck(&dlg, "Shared", &appData.shareDesktop, 0, col1, y)
+      ->disabled = sessionFixed;
     XwAddCheck(&dlg, "View only", &appData.viewOnly, 0, col2, y);
     y += rowH;
     XwAddCheck(&dlg, "Continuous updates", &appData.useContinuousUpdates,
@@ -173,7 +210,8 @@ DlgBuild(Bool withOptions)
     XwAddLabel(&dlg, "Encoding:", pad, y);
     y = DlgRadios(encNames, encVals, XtNumber(encNames),
 		  &appData.preferredEncoding, 3,
-		  DlgCellW(encNames, XtNumber(encNames)), col1, y, rowH);
+		  DlgCellW(encNames, XtNumber(encNames)), col1, y, rowH,
+		  False);
     XwAddCheck(&dlg, "JPEG", &appData.enableJPEG, 0, col1, y);
     y += rowH;
     XwAddLabel(&dlg, "Quality", pad, y + 1)->enableIf = &appData.enableJPEG;
@@ -191,15 +229,20 @@ DlgBuild(Bool withOptions)
     y += xwLineH / 2;
     XwAddLabel(&dlg, "Color:", pad, y);
     y = DlgRadios(colorNames, colorVals, XtNumber(colorNames),
-		  &appData.colorLevel, 2, col2 - col1, col1, y, rowH);
-    XwAddCheck(&dlg, "True color", &appData.forceTrueColor, 0, col1, y);
-    XwAddCheck(&dlg, "Own colormap", &appData.forceOwnCmap, 0, col2, y);
+		  &appData.colorLevel, 2, col2 - col1, col1, y, rowH,
+		  colorFixed);
+    XwAddCheck(&dlg, "True color", &appData.forceTrueColor, 0, col1, y)
+      ->disabled = visualFixed;
+    XwAddCheck(&dlg, "Own colormap", &appData.forceOwnCmap, 0, col2, y)
+      ->disabled = visualFixed;
     y += rowH;
     XwAddLabel(&dlg, "Depth", pad, y + 1)->enableIf = &appData.forceTrueColor;
+    dlg.items[dlg.nItems - 1].disabled = visualFixed;
     slider[2] = dlg.nItems;
     XwAddSlider(&dlg, &appData.requestedDepth, depthVals,
 		XtNumber(depthVals), True, col1, y, 1);
     dlg.items[slider[2]].enableIf = &appData.forceTrueColor;
+    dlg.items[slider[2]].disabled = visualFixed;
     y += rowH;
   }
 
@@ -213,14 +256,14 @@ DlgBuild(Bool withOptions)
 
   y += xwLineH / 2;
   {
-    int bw = XwStrW("Connect") + 4 * xwCharW;
+    int bw = XwStrW(okLabel) + 4 * xwCharW;
     int cw = XwStrW("Cancel") + 4 * xwCharW;
     int gap = xwCharW * 2;
 
     if (dlg.w < pad * 2 + bw + cw + gap)
       dlg.w = pad * 2 + bw + cw + gap;
 
-    XwAddButton(&dlg, "Connect", RES_CONNECT, dlg.w - pad - cw - gap - bw, y);
+    XwAddButton(&dlg, okLabel, RES_CONNECT, dlg.w - pad - cw - gap - bw, y);
     XwAddButton(&dlg, "Cancel", RES_CANCEL, dlg.w - pad - cw, y);
     y += xwLineH + 6;
   }
@@ -239,15 +282,20 @@ DlgBuild(Bool withOptions)
 
 
 static int
-DlgRun(Bool withOptions, const char *title, const char *message)
+DlgRun(int mode, const char *title, const char *message)
 {
   int res;
 
-  if (!XwInit())
+  /* There is one panel, and it is modal only in the sense that it runs its
+     own event loop - it takes no X grab, so F8 still reaches the desktop
+     while it is up and can ask for a second one.  Refuse that rather than
+     build over the panel the outer loop is still running. */
+  if (!XwInit() || dlgInUse)
     return RES_CANCEL;
 
+  dlgInUse = True;
   dlg.message = message;
-  DlgBuild(withOptions);
+  DlgBuild(mode);
 
   XwBuildWindow(&dlg, "connectDialog", title, dlg.w, dlg.h, True);
   XwPlaceCentred(&dlg);
@@ -259,6 +307,7 @@ DlgRun(Bool withOptions, const char *title, const char *message)
 
   XwPopdown(&dlg);
   XwDestroy(&dlg);
+  dlgInUse = False;
 
   return res;
 }
@@ -274,7 +323,7 @@ char *
 DoConnectDialog(const char *message)
 {
   for (;;) {
-    if (DlgRun(True, "TenoxVNC " TENOXVNC_VERSION " - Connect", message)
+    if (DlgRun(DLG_CONNECT, "TenoxVNC " TENOXVNC_VERSION " - Connect", message)
 	!= RES_CONNECT) {
       Cleanup();
       exit(1);
@@ -324,7 +373,7 @@ DoPasswordDialog()
   if (connectDialogUsed)
     return dlgPass;
 
-  if (DlgRun(False, "TenoxVNC - Password", NULL) != RES_CONNECT) {
+  if (DlgRun(DLG_PASSWORD, "TenoxVNC - Password", NULL) != RES_CONNECT) {
     Cleanup();
     exit(1);
   }
@@ -342,4 +391,21 @@ void
 ForgetPassword(void)
 {
   memset(dlgPass, 0, sizeof(dlgPass));
+  ForgetSessionPassword();
+}
+
+
+/*
+ * DoSettingsDialog is the F8 "Settings..." panel: the options half of the
+ * connection dialog, with the server and password fields left off and the
+ * settings that cannot change under a live window greyed out.  Returns True
+ * if Apply was pressed, in which case appData holds the new values; the
+ * caller keeps a copy of the old ones to put back on Cancel and to work out
+ * what actually changed.
+ */
+
+Bool
+DoSettingsDialog(void)
+{
+  return DlgRun(DLG_SETTINGS, "TenoxVNC - Settings", NULL) == RES_CONNECT;
 }

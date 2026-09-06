@@ -298,6 +298,29 @@ RestoreLocalCursor(void)
 }
 
 
+/*
+ * ForgetRemoteCursor drops the shape the server sent us and puts the local
+ * cursor back.  The stored pixels are in the pixel format of the connection
+ * that delivered them, so a reconnect cannot keep them: the next server
+ * sends its own shape when the pointer next moves.
+ */
+
+void
+ForgetRemoteCursor(void)
+{
+  SoftCursorUnlockScreen();
+  FreeSoftCursor();
+  RestoreLocalCursor();
+  FreeX11Cursor();
+
+  free(curSource);
+  free(curMask);
+  curSource = NULL;
+  curMask = NULL;
+  curShapeSet = False;
+}
+
+
 /*********************************************************************
  * HandleCursorShape(). Support for XCursor and RichCursor shape
  * updates. We emulate cursor operating on the frame buffer (that is

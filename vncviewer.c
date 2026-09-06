@@ -29,6 +29,16 @@ Display* dpy;
 
 Widget toplevel;
 
+/* Set by the settings panel when what it was given needs a new connection to
+   take effect.  It is only ever acted on from the main loop below: the panel
+   runs several frames deep inside HandleRFBServerMessage, which is no place
+   to drop the socket the decoders are reading from. */
+Bool sessionRestartPending = False;
+
+static Bool ConnectSession(Bool allowDialog);
+static Bool RestartSession(void);
+static void ApplySettings(const AppData *old);
+
 /*
  * ProcessPendingXEvents - handle queued X events, due timers etc. without
  * blocking.  The classic viewer only processes X events when the socket
@@ -55,6 +65,147 @@ void
 PrintBanner(void)
 {
   fprintf(stderr, "TenoxVNC %s\n", TENOXVNC_VERSION);
+}
+
+/*
+ * ConnectSession dials the server and runs the RFB handshake.
+ *
+ * Anything that goes wrong - an unknown host, a refused or timed out
+ * connection, something that is not a VNC server, a rejected password - is
+ * worth a second chance when there is a dialog to show it in: it goes back up
+ * with the message above the fields, and the retry redials from scratch,
+ * since the server has dropped us by then.  Started from the command line
+ * there is nobody to show a dialog to, so a failure is fatal as it was.
+ */
+
+static Bool
+ConnectSession(Bool allowDialog)
+{
+  for (;;) {
+    connError[0] = '\0';
+    authFailed = False;
+
+    /* The handshake below dispatches X events too, so the settings panel can
+       ask for a restart in the middle of one.  The connection being made is
+       already the restart it wants, and leaving the flag set would abort this
+       handshake as well - and every one after it. */
+    sessionRestartPending = False;
+
+    if (ConnectToRFBServer(vncServerHost, vncServerPort)) {
+      if (InitialiseRFBConnection())
+	return True;
+      close(rfbsock);
+      rfbsock = -1;
+    }
+
+    if (!allowDialog)
+      return False;
+
+    if (authFailed) {
+      ForgetPassword();
+      AskForServer("Authentication failed - try again.");
+      continue;
+    }
+
+    AskForServer(connError[0] ? connError : "Unable to connect.");
+  }
+}
+
+
+/*
+ * RestartSession drops the connection and makes a new one, which is how the
+ * settings that are fixed at connect time - the shared flag and the pixel
+ * format behind the color level - are changed from the F8 menu.
+ *
+ * The window stays where it is.  Everything that was on it is lost, because
+ * it is in the old pixel format and its colors are old colormap cells, so the
+ * new connection is asked for the whole screen once it is up.
+ */
+
+static Bool
+RestartSession(void)
+{
+  ForgetRemoteCursor();
+
+  if (rfbsock >= 0) {
+    close(rfbsock);
+    rfbsock = -1;
+  }
+
+  if (!ConnectSession(True))
+    return False;
+
+  /* Free the old colormap cells and take the format the new level asks for
+     before anything is decoded in it. */
+  ReloadColorFormat();
+
+  RebuildDesktopFramebuffer();
+
+  /* SetFormatAndEncodings ends by putting the new desktop name, encoding and
+     color mode in the title. */
+  if (!SetFormatAndEncodings())
+    return False;
+
+  return SendFramebufferUpdateRequest(0, 0, si.framebufferWidth,
+				      si.framebufferHeight, False);
+}
+
+
+/*
+ * ApplySettings works out what the settings panel changed and does the least
+ * that will make it so.  The encoding list may be re-sent at any point in the
+ * stream, and the rest of it is ours alone; only the pixel format and the
+ * shared flag need the connection made again.
+ */
+
+static void
+ApplySettings(const AppData *old)
+{
+  if (appData.colorLevel != old->colorLevel ||
+      appData.shareDesktop != old->shareDesktop) {
+    sessionRestartPending = True;
+    return;
+  }
+
+  if (appData.preferredEncoding != old->preferredEncoding ||
+      appData.compressLevel != old->compressLevel ||
+      appData.qualityLevel != old->qualityLevel ||
+      appData.enableJPEG != old->enableJPEG)
+    SendEncodings();
+
+  if (appData.viewOnly != old->viewOnly)
+    UpdateWindowTitle();
+
+  if (appData.useContinuousUpdates != cuActive && supportsCU)
+    ToggleContinuousUpdates(NULL, NULL, NULL, NULL);
+
+  /* Turning remote resize on asks the server for the size the window already
+     is, the way learning the server supports it does. */
+  if (appData.useRemoteResize && !old->useRemoteResize &&
+      supportsSetDesktopSize)
+    DesktopSizeSupportLearned();
+}
+
+
+/*
+ * ShowSettings is the action behind the F8 menu's "Settings..." entry.  The
+ * panel writes straight into appData as it is used, so the old values are
+ * kept to put back if it is cancelled, and to compare against if it is not.
+ */
+
+void
+ShowSettings(Widget w, XEvent *event, String *params, Cardinal *num_params)
+{
+  AppData old;
+
+  old = appData;
+
+  if (!DoSettingsDialog()) {
+    appData = old;
+    return;
+  }
+
+  ApplySettings(&old);
 }
 
 int
@@ -126,40 +277,13 @@ main(int argc, char **argv)
 
   /* Unless we accepted an incoming connection, make a TCP connection to the
      given VNC server, and initialise the VNC connection, which includes
-     reading the password.
-
-     Anything that goes wrong here - an unknown host, a refused or timed out
-     connection, something that is not a VNC server, a rejected password - is
-     worth a second chance when the connection dialog is in play: it goes
-     back up with the message above the fields.  The server has dropped us by
-     then, so the retry redials from scratch.  Started from the command line
-     there is nobody to show a dialog to, so a failure is fatal as it was. */
+     reading the password.  A failure is only worth retrying in the dialog
+     when the dialog is what we were driven from - see ConnectSession. */
 
   if (listenSpecified) {
     if (!InitialiseRFBConnection()) exit(1);
-  } else {
-    while (1) {
-      connError[0] = '\0';
-      authFailed = False;
-
-      if (ConnectToRFBServer(vncServerHost, vncServerPort)) {
-	if (InitialiseRFBConnection())
-	  break;
-	close(rfbsock);
-	rfbsock = -1;
-      }
-
-      if (!connectDialogUsed)
-	exit(1);
-
-      if (authFailed) {
-	ForgetPassword();
-	AskForServer("Authentication failed - try again.");
-	continue;
-      }
-
-      AskForServer(connError[0] ? connError : "Unable to connect.");
-    }
+  } else if (!ConnectSession(connectDialogUsed)) {
+    exit(1);
   }
 
   /* Create the "popup" widget - this won't actually appear on the screen until
@@ -216,7 +340,18 @@ main(int argc, char **argv)
 
   while (1) {
     ProcessPendingXEvents();
-    if (!HandleRFBServerMessage())
+
+    /* The settings panel runs from the X events HandleRFBServerMessage
+       dispatches while it waits for the server, and asks for a new
+       connection by making that read give up.  So a read that failed is
+       only a real failure when no restart is waiting behind it - this is
+       the one place in the viewer where the socket may be dropped. */
+
+    if (!sessionRestartPending && !HandleRFBServerMessage() &&
+	!sessionRestartPending)
+      break;
+
+    if (sessionRestartPending && !RestartSession())
       break;
   }
 

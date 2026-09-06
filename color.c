@@ -51,11 +51,28 @@ static const struct {
 
 static int nColorsAllocated;
 
+/* True when we settled for the display's default visual, which is the only
+   case in which the color level has any say in the pixel format: the forced
+   visuals dictate it themselves.  Also what makes the level changeable from
+   the F8 settings panel, since the visual cannot change under a live
+   window. */
+static Bool defaultVisualInUse = False;
+
+/* Every cell AllocateColor was given, plus the shared ones SetupColorMap
+   kept as nearest matches, so that they can be handed back before the next
+   level allocates its own.  A connect-time only allocation never needed
+   this; going from 64 colors back to 256 does. */
+static unsigned long allocedPixels[MAX_CMAP_SIZE * 2];
+static int nAllocedPixels;
+
 static Bool GetPseudoColorVisualAndCmap(int depth);
 static Bool GetTrueColorVisualAndCmap(int depth);
 static int GetBPPForDepth(int depth);
 static void SetReducedFormat(int level);
+static void SetColorFormat(void);
 static void SetupColorMap();
+static void KeepPixel(unsigned long pixel);
+static void FreeColorMap(void);
 static void AllocateExactColors();
 static Bool AllocateColor(int r, int g, int b);
 static int FirstBit(unsigned long mask);
@@ -154,6 +171,25 @@ SetVisualAndCmap()
   visdepth = DefaultDepth(dpy,DefaultScreen(dpy));
   visbpp = GetBPPForDepth(visdepth);
   cmap = DefaultColormap(dpy,DefaultScreen(dpy));
+  defaultVisualInUse = True;
+
+  SetColorFormat();
+}
+
+
+/*
+ * SetColorFormat turns the color level into a pixel format to ask the server
+ * for, and builds the translation table when the level asks for fewer colors
+ * than the visual holds.  Split out of SetVisualAndCmap because it is the
+ * only part of it a second connection may repeat: the visual is fixed for the
+ * life of the window, but the level behind it is not.
+ */
+
+static void
+SetColorFormat(void)
+{
+  FreeColorMap();
+  useColorMap = False;
 
   if (appData.colorLevel == COLOR_FULL && vis->class == TrueColor) {
 
@@ -187,6 +223,29 @@ SetVisualAndCmap()
   PrintPixelFormat(&myFormat);
 
   SetupColorMap();
+}
+
+
+/*
+ * ReloadColorFormat is what a reconnect calls when the color level has been
+ * changed from the F8 settings panel.  Nothing to do where the visual chose
+ * the format, which is also what ColorLevelSettable reports so that the panel
+ * can grey the level out rather than offer a setting that does nothing.
+ */
+
+void
+ReloadColorFormat(void)
+{
+  if (!defaultVisualInUse)
+    return;
+
+  SetColorFormat();
+}
+
+Bool
+ColorLevelSettable(void)
+{
+  return defaultVisualInUse;
 }
 
 
@@ -390,6 +449,29 @@ GetBPPForDepth(int depth)
 
 
 /*
+ * KeepPixel remembers a cell we hold, FreeColorMap gives them all back.  One
+ * entry per successful XAllocColor, since that is what the X server counts:
+ * two cube colors that land on the same cell hold two references to it.
+ */
+
+static void
+KeepPixel(unsigned long pixel)
+{
+  if (nAllocedPixels < (int)XtNumber(allocedPixels))
+    allocedPixels[nAllocedPixels++] = pixel;
+}
+
+static void
+FreeColorMap(void)
+{
+  if (nAllocedPixels)
+    XFreeColors(dpy, cmap, allocedPixels, nAllocedPixels, 0);
+
+  nAllocedPixels = 0;
+}
+
+
+/*
  * SetupColorMap() sets up the colorToPixel array.
  *
  * It calls AllocateExactColors to allocate some exact colors from the cube
@@ -521,12 +603,17 @@ SetupColorMap()
       }
     }
 
-    /* Tidy up shared colors which we allocated but aren't going to use */
+    /* Tidy up shared colors which we allocated but aren't going to use, and
+       keep the rest on the free list: we hold a reference to each of them
+       until the color level changes. */
 
     for (i = 0; i < cmapSize; i++) {
-      if (shared[i] && !usedAsNearest[i]) {
-	  XFreeColors(dpy, cmap, (unsigned long *)&i, 1, 0);
-      }
+      if (!shared[i])
+	continue;
+      if (usedAsNearest[i])
+	KeepPixel((unsigned long)i);
+      else
+	XFreeColors(dpy, cmap, (unsigned long *)&i, 1, 0);
     }
 
     fprintf(stderr,"Using %d existing shared colors\n", nSharedUsed);
@@ -657,6 +744,7 @@ AllocateColor(int r, int g, int b)
     return False;
 
   colorToPixel[ColorIndex(r,g,b)] = c.pixel;
+  KeepPixel(c.pixel);
 
   nColorsAllocated++;
 

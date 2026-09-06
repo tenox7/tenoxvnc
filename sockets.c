@@ -80,6 +80,9 @@ ProcessXtEvents()
     while (XtAppPending(appContext))
       StatsProcessEvent(XtIMAll);
 
+    if (sessionRestartPending)
+      break;
+
     if (VmsSocketReady(rfbsock, VMS_POLL_MSEC))
       break;
   }
@@ -91,11 +94,14 @@ ProcessXtEvents()
 #else /* !__VMS */
 
 static Bool rfbsockReady = False;
+static XtInputId rfbsockInput = 0;
+
 static void
 rfbsockReadyCallback(XtPointer clientData, int *fd, XtInputId *id)
 {
   rfbsockReady = True;
   XtRemoveInput(*id);
+  rfbsockInput = 0;
 }
 
 static void
@@ -106,10 +112,17 @@ ProcessXtEvents()
 #endif
 
   rfbsockReady = False;
-  XtAppAddInput(appContext, rfbsock, (XtPointer)XtInputReadMask,
-		rfbsockReadyCallback, NULL);
-  while (!rfbsockReady) {
+  rfbsockInput = XtAppAddInput(appContext, rfbsock, (XtPointer)XtInputReadMask,
+			       rfbsockReadyCallback, NULL);
+  while (!rfbsockReady && !sessionRestartPending) {
     StatsProcessEvent(XtIMAll);
+  }
+
+  /* The wait can also end because something we dispatched asked for a
+     reconnect, in which case the callback never fired. */
+  if (rfbsockInput) {
+    XtRemoveInput(rfbsockInput);
+    rfbsockInput = 0;
   }
 
   STATS(vncStats.sockWaits++);
@@ -121,13 +134,25 @@ ProcessXtEvents()
 /*
  * One read() into p, pumping X events for as long as the socket is dry.
  * Returns the byte count, or -1 on error or EOF.
+ *
+ * It also gives up on the connection when something dispatched from the X
+ * queue asked for a reconnect.  That unwinds the whole read through the
+ * decoders and back to the main loop, which is the only place the socket may
+ * be dropped: the settings panel that asks for one runs several frames deep
+ * inside this read.  Stopping mid-rectangle costs nothing, since the new
+ * connection asks for the screen again from scratch.
  */
 
 static int
 ReadSock(char *p, unsigned int n)
 {
   for (;;) {
-    int i = read(rfbsock, p, n);
+    int i;
+
+    if (sessionRestartPending)
+      return -1;
+
+    i = read(rfbsock, p, n);
 
     STATS(if (i > 0) { vncStats.sockIn += i; vncStats.sockReads++; });
     if (i > 0)
