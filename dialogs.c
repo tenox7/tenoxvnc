@@ -356,7 +356,7 @@ AskForServer(const char *message)
     if (ok)
       return;
 
-    message = connError;
+    message = connErrorMsg;
   }
 }
 

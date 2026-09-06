@@ -38,7 +38,7 @@ static int CleanupXIOErrorHandler(Display *dpy);
 static void CleanupXtErrorHandler(String message) _X_NORETURN;
 static Bool IconifyNamedWindow(Window w, char *name, Bool undo);
 
-char connError[CONN_ERROR_LEN];
+char connErrorMsg[CONN_ERROR_LEN];
 
 /*
  * ConnError prints a message the way the viewer always has and keeps a copy
@@ -60,14 +60,14 @@ ConnError(const char *format, ...)
 
   fprintf(stderr, "%s\n", msg);
 
-  strncpy(connError, msg, CONN_ERROR_LEN - 1);
-  connError[CONN_ERROR_LEN - 1] = '\0';
+  strncpy(connErrorMsg, msg, CONN_ERROR_LEN - 1);
+  connErrorMsg[CONN_ERROR_LEN - 1] = '\0';
 
   /* Part of the text can come from the server, and the dialog draws it as a
      single line of plain ASCII. */
-  for (i = 0; connError[i]; i++)
-    if ((unsigned char)connError[i] < 0x20 || (unsigned char)connError[i] >= 0x7F)
-      connError[i] = ' ';
+  for (i = 0; connErrorMsg[i]; i++)
+    if ((unsigned char)connErrorMsg[i] < 0x20 || (unsigned char)connErrorMsg[i] >= 0x7F)
+      connErrorMsg[i] = ' ';
 }
 
 

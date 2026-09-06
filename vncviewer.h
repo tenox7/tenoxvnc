@@ -293,7 +293,7 @@ extern void Cleanup();
 /* Whatever went wrong with the last connection attempt, ready to be shown in
    the connection dialog.  Empty when nothing has failed yet. */
 #define CONN_ERROR_LEN 96
-extern char connError[CONN_ERROR_LEN];
+extern char connErrorMsg[CONN_ERROR_LEN];
 
 extern void ConnError(const char *format, ...);
 

@@ -82,7 +82,7 @@ static Bool
 ConnectSession(Bool allowDialog)
 {
   for (;;) {
-    connError[0] = '\0';
+    connErrorMsg[0] = '\0';
     authFailed = False;
 
     /* The handshake below dispatches X events too, so the settings panel can
@@ -107,7 +107,7 @@ ConnectSession(Bool allowDialog)
       continue;
     }
 
-    AskForServer(connError[0] ? connError : "Unable to connect.");
+    AskForServer(connErrorMsg[0] ? connErrorMsg : "Unable to connect.");
   }
 }
 
