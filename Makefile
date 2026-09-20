@@ -32,6 +32,9 @@ all:
 	  AIX)     t=aix;; \
 	  OSF1)    t=osf1;; \
 	  NetBSD)  t=netbsd;; \
+	  FreeBSD) t=freebsd;; \
+	  OpenBSD) t=openbsd;; \
+	  DragonFly) t=dragonfly;; \
 	  HP-UX)   case "$$r" in \
 	             *.09.*) t=hpux9;; \
 	             *.10.*) t=hpux10;; \
@@ -182,9 +185,21 @@ irix53:
 	  $(OBJECTS) -lXt -lXext -lX11 -lm -lgcc -lgcc_eh -lc \
 	  $(IRIX5_GCCLIB)/crtend.o $(IRIX5_GCCLIB)/irix-crtn.o /usr/lib/crtn.o
 
+# Every BSD ships its system compiler as "cc" - clang on the modern ones, gcc
+# on older releases - and none of them keep X11 in its default search path.
+# FreeBSD and DragonFly both use the ports layout under /usr/local.
+freebsd dragonfly:
+	$(MAKE) CC=cc VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/local/include $(DEFS)" \
+	  LDFLAGS="-L/usr/local/lib -lXt -lXext -lX11 -lm" $(TARGET)
+
 netbsd:
-	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include $(DEFS)" \
+	$(MAKE) CC=cc VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R7/include $(DEFS)" \
 	  LDFLAGS="-L/usr/X11R7/lib -R/usr/X11R7/lib -lXt -lXext -lX11 -lm" $(TARGET)
+
+# Xenocara still installs to /usr/X11R6.
+openbsd:
+	$(MAKE) CC=cc VERSTAMP=version CFLAGS="-O2 $(INCS) -DMITSHM -I/usr/X11R6/include $(DEFS)" \
+	  LDFLAGS="-L/usr/X11R6/lib -lXt -lXext -lX11 -lm" $(TARGET)
 
 clean:
 	rm -f *.o $(TARGET)
@@ -193,4 +208,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly

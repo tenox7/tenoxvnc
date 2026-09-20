@@ -27,6 +27,8 @@
 #include <stdarg.h>
 #ifdef __VMS
 #include <lib$routines.h>	/* lib$wait - see Msleep below */
+#else
+#include <sys/wait.h>
 #endif
 
 static void CleanupSignalHandler(int sig);
