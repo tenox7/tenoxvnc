@@ -46,6 +46,7 @@ all:
 	  UnixWare|UNIX_SV) t=unixware;; \
 	  SCO_SV)  case "$$v" in 6.*) t=osr6;; *) t=osr5;; esac;; \
 	  ReliantUNIX*) t=reliant;; \
+	  SINIX-Z) t=sinixz;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
 	esac; \
 	echo "=> make $$t"; \
@@ -163,6 +164,13 @@ reliant:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
 
+# SINIX-Z keeps gcc in /usr/local/bin, off the default PATH. Its SVR4.0 libc
+# has no strcasecmp or wait3, so those come from libucb, linked after -lc so
+# that libc still wins for everything else.
+sinixz:
+	$(MAKE) CC=/usr/local/bin/gcc CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
+	  LDFLAGS="-lXt -lXext -lX11 -lsocket -lnsl -lm -lc /usr/ucblib/libucb.a" $(TARGET)
+
 # DEC C defaults to K&R mode on V4.0 and leaves __STDC__ undefined, so zlib.h
 # #defines const away and every prototype using it stops matching its
 # definition.  -std is DEC C's relaxed ANSI mode, the analogue of HP's -Ae.
@@ -215,4 +223,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 reliant osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 reliant sinixz osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly
