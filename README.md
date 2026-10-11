@@ -44,11 +44,13 @@ out, since an X visual cannot change under a window that is already up.
 ## Supported Platforms
 
 - AIX 4.x; 5.x
+- DG/UX 4.x
 - HP-UX 10.x; 11.x
 - IRIX 5.x; 6.x
 - Tru64 (DEC Unix / OSF/1) 5.x
 - SCO OpenServer 5.x; 6.x
 - SCO UnixWare 7.x
+- SINIX-N & Z 5.x 
 - SunOS 4.x; 5.x (Solaris)
 - OpenVMS 7.x; 8.x
 
