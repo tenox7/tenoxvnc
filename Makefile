@@ -47,6 +47,7 @@ all:
 	  SCO_SV)  case "$$v" in 6.*) t=osr6;; *) t=osr5;; esac;; \
 	  ReliantUNIX*) t=reliant;; \
 	  SINIX-Z) t=sinixz;; \
+	  dgux)    t=dgux;; \
 	  *) echo "$$s not known here, building with the defaults"; t=$(TARGET);; \
 	esac; \
 	echo "=> make $$t"; \
@@ -171,6 +172,14 @@ sinixz:
 	$(MAKE) CC=/usr/local/bin/gcc CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lsocket -lnsl -lm -lc /usr/ucblib/libucb.a" $(TARGET)
 
+# DG/UX R4.20 ships gcc 2.7.2 as its system compiler. Its X11R5 has MIT-SHM
+# in libXext but no XShm.h, so like hpux9 this builds without it. Its cpp
+# cannot parse the ULL in ULLONG_MAX, so zlib.h gets Z_U8 up front. The
+# link-time libXt.so hides _XtRegisterWindow, so the real one is named.
+dgux:
+	$(MAKE) CC=gcc CFLAGS="-O2 $(INCS) -DZ_U8='unsigned long long' $(DEFS)" \
+	  LDFLAGS="/usr/dglib/libXt.so.2 -lXext -lX11 -lsocket -lnsl -lm" $(TARGET)
+
 # DEC C defaults to K&R mode on V4.0 and leaves __STDC__ undefined, so zlib.h
 # #defines const away and every prototype using it stops matching its
 # definition.  -std is DEC C's relaxed ANSI mode, the analogue of HP's -Ae.
@@ -223,4 +232,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 reliant sinixz osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 reliant sinixz dgux osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly
