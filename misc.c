@@ -120,6 +120,8 @@ RfbValidServerStringLength(CARD32 len, size_t extra)
   return RfbCheckAddSize((size_t)len, extra, &total);
 }
 
+#ifndef _WIN32		/* the rest is X only; win32/ has its own */
+
 Dimension dpyWidth, dpyHeight;
 Atom wmDeleteWindow, wmState;
 
@@ -544,3 +546,5 @@ IconifyNamedWindow(Window w, char *name, Bool undo)
   if (children) XFree ((char *)children);
   return False;
 }
+
+#endif /* !_WIN32 */

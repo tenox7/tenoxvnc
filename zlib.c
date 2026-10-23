@@ -18,8 +18,8 @@
  * Built with NO_GZIP (set in zconf.h), so the gzip wrapper and its crc32
  * dependency are gone; the viewer only ever calls inflateInit, inflate and
  * inflateEnd.  The module text is verbatim upstream except that zutil.c's
- * include of gzguts.h is dropped, and inftrees.h, inflate.h and inffast.h
- * gained include guards.
+ * include of gzguts.h is dropped, inftrees.h, inflate.h and inffast.h
+ * gained include guards, and inflate() is built without -Og on old VC++.
  *
  * Not named zlib.c: vnc/zlib.c is the Zlib-encoding rectangle handler, and
  * the VMS build flattens every directory into one, so the names would clash.
@@ -777,6 +777,12 @@ local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy) {
    will return Z_BUF_ERROR if it has not reached the end of the stream.
  */
 
+/* VC++ 4.2 and older miscompile inflate() with -Og (global optimizations):
+   rects come out short or garbled.  The rest of zlib is fine with it. */
+#if defined(_MSC_VER) && _MSC_VER < 1100
+#pragma optimize("g", off)
+#endif
+
 int ZEXPORT inflate(z_streamp strm, int flush) {
     struct inflate_state FAR *state;
     z_const unsigned char FAR *next;    /* next input */
@@ -1452,6 +1458,10 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
         ret = Z_BUF_ERROR;
     return ret;
 }
+
+#if defined(_MSC_VER) && _MSC_VER < 1100
+#pragma optimize("", on)
+#endif
 
 int ZEXPORT inflateEnd(z_streamp strm) {
     struct inflate_state FAR *state;

@@ -21,6 +21,9 @@
  * sockets.c - functions to deal with sockets.
  */
 
+#ifdef _WIN32
+#include "w32sock.h"	/* Winsock under the names used below */
+#else
 #include <unistd.h>
 #include <sys/socket.h>
 #include <errno.h>
@@ -31,6 +34,7 @@
 #include <fcntl.h>
 #ifdef __VMS
 #include <sys/ioctl.h>	/* FIONBIO - see SetNonBlocking below */
+#endif
 #endif
 #include <assert.h>
 #include <vncviewer.h>

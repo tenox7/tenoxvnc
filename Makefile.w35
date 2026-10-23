@@ -1,0 +1,8 @@
+# Makefile.w35 - Windows NT 3.5 and later, Visual C++ 2.0: nmake -f Makefile.w35
+
+NODEBUG = 1
+!include <ntwin32.mak>
+
+LINKFLAGS = $(ldebug) $(lflags) -subsystem:windows -entry:mainCRTStartup
+
+!include win32\common.mak

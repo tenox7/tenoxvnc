@@ -44,12 +44,16 @@ extern int sys_nerr;
 #endif
 #include <unistd.h>
 #include <pwd.h>
+#ifdef _WIN32
+#include "w32compat.h"		/* win32/, in place of the X headers */
+#else
 #include <X11/IntrinsicP.h>
 #include <X11/StringDefs.h>
 #include <X11/Shell.h>
 #include <X11/Xmd.h>
 #include <X11/keysym.h>
 #include <X11/Xatom.h>
+#endif
 #ifdef __VMS
 #include "vms.h"
 #endif

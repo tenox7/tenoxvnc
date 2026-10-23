@@ -54,6 +54,11 @@ out, since an X visual cannot change under a window that is already up.
 - SunOS 4.x; 5.x (Solaris)
 - OpenVMS 7.x; 8.x
 
+## Windows
+
+- `nmake -f Makefile.w35` — Visual C++ 2.0, runs on NT 3.5, 3.51 and 4.0.
+- `nmake -f Makefile.w40` — Visual C++ 4.2, NT 4.0 only, same features.
+
 ## Credits
 
 - TightVNC (Constantin Kaplinsky, AT&T Labs Cambridge)
