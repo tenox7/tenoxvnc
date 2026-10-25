@@ -29,7 +29,7 @@ all:
 	  Linux)   t=linux;; \
 	  Darwin)  t=macos;; \
 	  SunOS)   case "$$r" in 4.*) t=sunos4;; *) t=solaris;; esac;; \
-	  AIX)     t=aix;; \
+	  AIX)     case "$$v" in 3) t=aix3;; *) t=aix;; esac;; \
 	  OSF1)    t=osf1;; \
 	  NetBSD)  t=netbsd;; \
 	  FreeBSD) t=freebsd;; \
@@ -143,6 +143,11 @@ aix:
 	$(MAKE) CFLAGS="-O2 $(INCS) -DMITSHM $(DEFS)" \
 	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
 
+# AIX 3.2.5 ships XShm.h but its libXext has no XShm calls.
+aix3:
+	$(MAKE) CFLAGS="-O2 $(INCS) $(DEFS)" \
+	  LDFLAGS="-lXt -lXext -lX11 -lm" $(TARGET)
+
 # libXt.so pulls in the Smc*/Ice* session-management calls but does not record
 # a dependency on them, so -lSM -lICE have to be named explicitly.
 unixware:
@@ -232,4 +237,4 @@ install: all
 	cp $(TARGET) /usr/local/bin/
 	-cp tenoxvnc.man /usr/local/man/man1/tenoxvnc.1
 
-.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix unixware osr5 osr6 reliant sinixz dgux osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly
+.PHONY: all version clean install linux macos solaris sunos4 hpux9 hpux10 hpux11 hpux1120 hpux1131 hpux1131ia64 aix aix3 unixware osr5 osr6 reliant sinixz dgux osf1 irix53 irix65 irix65mips4 netbsd freebsd openbsd dragonfly
