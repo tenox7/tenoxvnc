@@ -1,6 +1,6 @@
 # TenoxVNC
 
-VNC viewer for vintage Unix & VMS in plain C and X11. 
+VNC viewer for vintage Unix, VMS & Windows in plain C and X11 Win32/GDI. 
 
 Based on TightVNC, with TigerVNC feature backports (dynamic desktop resizing, continuous updates, fence, desktop name, ZRLE).
 
