@@ -56,8 +56,8 @@ out, since an X visual cannot change under a window that is already up.
 
 ## Windows
 
-- `nmake -f Makefile.w35` — Visual C++ 2.0, runs on NT 3.5, 3.51 and 4.0.
-- `nmake -f Makefile.w40` — Visual C++ 4.2, NT 4.0 only, same features.
+- `nmake -f Makefile.w32` — NT 3.1 SDK or any Visual C++, flags picked per compiler.
+- NT 3.1 SDK and VC++ 2.0 builds run on NT 3.1 and later; newer compilers need newer Windows.
 
 ## Credits
 

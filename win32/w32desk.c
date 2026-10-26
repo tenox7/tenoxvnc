@@ -40,12 +40,20 @@ Atom wmDeleteWindow;
 
 HWND w32Wnd = NULL;
 
-/* the image is a bottom up DIB section, so its rows run backwards */
+/* the image is a bottom up DIB section, so its rows run backwards; NT 3.1
+   has no DIB sections, so there it is plain memory and imageDC stays NULL */
 static HBITMAP image = NULL, oldBitmap;
 static HDC imageDC = NULL;
 static char *imageBits = NULL;
 static int imageStride, imageHeight;
+static struct {
+  BITMAPINFOHEADER h;
+  RGBQUAD colors[256];
+} bmi;
 #define ROW(y)	(imageBits + (imageHeight - 1 - (y)) * imageStride)
+
+typedef HBITMAP (WINAPI *DIBSectionProc)(HDC, BITMAPINFO *, UINT, VOID **,
+					 HANDLE, DWORD);
 
 static int scrollX = 0, scrollY = 0;	/* image pixel at the top left */
 static int visW = 0, visH = 0;		/* how much of the image shows */
@@ -222,6 +230,8 @@ FreeDesktopImage(void)
   if (image) {
     DeleteObject(image);
     image = NULL;
+  } else {
+    free(imageBits);
   }
   imageBits = NULL;
 }
@@ -229,12 +239,9 @@ FreeDesktopImage(void)
 static void
 CreateDesktopImage(void)
 {
-  struct {
-    BITMAPINFOHEADER h;
-    RGBQUAD colors[256];
-  } bmi;
   int w = si.framebufferWidth > 0 ? si.framebufferWidth : 1;
   int h = si.framebufferHeight > 0 ? si.framebufferHeight : 1;
+  DIBSectionProc createDIBSection;
   HDC screen;
 
   FreeDesktopImage();
@@ -258,20 +265,27 @@ CreateDesktopImage(void)
     masks[2] = 0x001f;
   }
 
-  screen = GetDC(NULL);
-  image = CreateDIBSection(screen, (BITMAPINFO *)&bmi, DIB_RGB_COLORS,
-			   (VOID **)&imageBits, NULL, 0);
-  imageDC = CreateCompatibleDC(screen);
-  ReleaseDC(NULL, screen);
+  imageStride = ((w * visbpp + 31) / 32) * 4;
+  imageHeight = h;
 
-  if (!image || !imageDC || !imageBits) {
+  createDIBSection = (DIBSectionProc)
+    GetProcAddress(GetModuleHandle("GDI32"), "CreateDIBSection");
+  if (createDIBSection) {
+    screen = GetDC(NULL);
+    image = createDIBSection(screen, (BITMAPINFO *)&bmi, DIB_RGB_COLORS,
+			     (VOID **)&imageBits, NULL, 0);
+    imageDC = CreateCompatibleDC(screen);
+    ReleaseDC(NULL, screen);
+  } else {
+    imageBits = malloc((size_t)imageStride * h);
+  }
+
+  if (!imageBits || (createDIBSection && (!image || !imageDC))) {
     fprintf(stderr, "Cannot make a %dx%d image of the desktop\n", w, h);
     exit(1);
   }
-  oldBitmap = SelectObject(imageDC, image);
-
-  imageStride = ((w * visbpp + 31) / 32) * 4;
-  imageHeight = h;
+  if (imageDC)
+    oldBitmap = SelectObject(imageDC, image);
   memset(imageBits, 0, (size_t)imageStride * h);
 }
 
@@ -415,12 +429,24 @@ DebugFlash(int x, int y, int width, int height)
   GdiFlush();
 }
 
+/* image pixels at (sx, sy) to the window at (dx, dy) */
+static void
+Blit(HDC dc, int dx, int dy, int width, int height, int sx, int sy)
+{
+  if (imageDC)
+    BitBlt(dc, dx, dy, width, height, imageDC, sx, sy, SRCCOPY);
+  else
+    SetDIBitsToDevice(dc, dx, dy, width, height, sx, imageHeight - sy - height,
+		      0, imageHeight, imageBits, (BITMAPINFO *)&bmi,
+		      DIB_RGB_COLORS);
+}
+
 void
 PutImageRect(int x, int y, int width, int height)
 {
   HDC dc;
 
-  if (!imageDC || width <= 0 || height <= 0)
+  if (!imageBits || width <= 0 || height <= 0)
     return;
 
   /* only what shows; the rest is painted when it scrolls into view */
@@ -433,7 +459,7 @@ PutImageRect(int x, int y, int width, int height)
 
   dc = GetDC(w32Wnd);
   W32SelectPalette(dc);
-  BitBlt(dc, x - scrollX, y - scrollY, width, height, imageDC, x, y, SRCCOPY);
+  Blit(dc, x - scrollX, y - scrollY, width, height, x, y);
   ReleaseDC(w32Wnd, dc);
 }
 
@@ -759,11 +785,11 @@ Paint(void)
 
   W32SelectPalette(dc);
 
-  if (imageDC && r.left < right && r.top < bottom)
-    BitBlt(dc, r.left, r.top,
-	   (r.right < right ? r.right : right) - r.left,
-	   (r.bottom < bottom ? r.bottom : bottom) - r.top,
-	   imageDC, r.left + scrollX, r.top + scrollY, SRCCOPY);
+  if (imageBits && r.left < right && r.top < bottom)
+    Blit(dc, r.left, r.top,
+	 (r.right < right ? r.right : right) - r.left,
+	 (r.bottom < bottom ? r.bottom : bottom) - r.top,
+	 r.left + scrollX, r.top + scrollY);
 
   /* black around a desktop smaller than the window */
   if (r.right > right) {

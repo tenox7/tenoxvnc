@@ -1,0 +1,76 @@
+# Makefile.w32 - Windows NT 3.1 and later, NT 3.1 SDK or any Visual C++: nmake -f Makefile.w32
+
+# MSC = _MSC_VER of the cl in PATH: 800 NT 3.1 SDK, 900 VC++ 2.0, 1020 VC++ 4.2, 1200 VC++ 6.0, 1400 VS2005 ...
+!IF [echo MSC = _MSC_VER > msc.c] == 0 && [cl -nologo -EP -P msc.c > nul 2>&1] == 0
+!INCLUDE msc.i
+!ENDIF
+!IF [del msc.?]
+!ENDIF
+!IFNDEF MSC
+!ERROR cl not found
+!ENDIF
+
+TARGET = tenoxvnc.exe
+LD = link
+RES = tenoxvnc.res
+
+CFLAGS = -c -nologo -W3 -Ox -DWIN32 -DWIN32_LEAN_AND_MEAN -I. -Iwin32
+LFLAGS = -nologo -release -subsystem:windows -entry:mainCRTStartup
+LIBS = kernel32.lib user32.lib gdi32.lib wsock32.lib
+
+!IF $(MSC) < 900
+# NT 3.1 SDK: link32 wants the resources through cvtres, and knows no -nologo or -release
+LD = link32
+RES = tenoxvnc.rbj
+LFLAGS = -nodefaultlib -subsystem:windows -entry:mainCRTStartup
+LIBS = libc.lib $(LIBS)
+!ELSE
+!IF $(MSC) < 1100
+# VC++ 2.0 and 4.x: the same objs and exe as ntwin32.mak and win32.mak gave
+LFLAGS = -nodefaultlib $(LFLAGS)
+LIBS = libc.lib oldnames.lib $(LIBS)
+!IF $(MSC) >= 1000
+CFLAGS = $(CFLAGS) -D_WIN32_WINNT=0x0400
+!ENDIF
+!ENDIF
+!IF $(MSC) >= 1400
+# VS2005 and later: no "unsafe CRT" warnings, no .manifest file
+CFLAGS = $(CFLAGS) -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE
+LFLAGS = $(LFLAGS) -manifest:no
+!ENDIF
+!ENDIF
+
+# corre.c hextile.c rre.c tight.c zlibenc.c zrle.c are #included by rfbproto.c
+OBJS = vncviewer.obj argsresources.obj rfbproto.obj sockets.obj misc.obj \
+	caps.obj vncauth.obj d3des.obj zlib.obj jpeg.obj \
+	w32xt.obj w32desk.obj w32color.obj w32curs.obj w32key.obj \
+	w32dlg.obj w32misc.obj
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS) $(RES)
+	$(LD) $(LFLAGS) -out:$(TARGET) $(OBJS) $(RES) $(LIBS)
+
+.c.obj:
+	cl $(CFLAGS) $<
+
+{win32}.c{}.obj:
+	cl $(CFLAGS) $<
+
+rfbproto.obj: rfbproto.c rre.c corre.c hextile.c zlibenc.c tight.c zrle.c
+
+# chmod() is in io.h, and the Unix permission names are not there at all
+vncauth.obj: vncauth.c
+	cl $(CFLAGS) -FIio.h -DS_IRUSR=0400 -DS_IWUSR=0200 vncauth.c
+
+tenoxvnc.res: win32\tenoxvnc.rc win32\w32res.h
+	rc -DWIN32 -D_WIN32 -r -iwin32 -fo tenoxvnc.res win32\tenoxvnc.rc
+
+tenoxvnc.rbj: tenoxvnc.res
+	cvtres -$(CPU) tenoxvnc.res -o tenoxvnc.rbj
+
+clean:
+	-del *.obj
+	-del tenoxvnc.res
+	-del tenoxvnc.rbj
+	-del $(TARGET)
