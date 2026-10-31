@@ -63,7 +63,7 @@ rfbproto.obj: rfbproto.c rre.c corre.c hextile.c zlibenc.c tight.c zrle.c
 vncauth.obj: vncauth.c
 	cl $(CFLAGS) -FIio.h -DS_IRUSR=0400 -DS_IWUSR=0200 vncauth.c
 
-tenoxvnc.res: win32\tenoxvnc.rc win32\w32res.h
+tenoxvnc.res: win32\tenoxvnc.rc win32\w32res.h tenoxvnc.ico
 	rc -DWIN32 -D_WIN32 -r -iwin32 -fo tenoxvnc.res win32\tenoxvnc.rc
 
 tenoxvnc.rbj: tenoxvnc.res
