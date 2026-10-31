@@ -53,11 +53,7 @@ out, since an X visual cannot change under a window that is already up.
 - SINIX-N & Z 5.x 
 - SunOS 4.x; 5.x (Solaris)
 - OpenVMS 7.x; 8.x
-
-## Windows
-
-- `nmake -f Makefile.w32` — NT 3.1 SDK or any Visual C++, flags picked per compiler.
-- NT 3.1 SDK and VC++ 2.0 builds run on NT 3.1 and later; newer compilers need newer Windows.
+- Windows NT 3.x; 4.x
 
 ## Credits
 
