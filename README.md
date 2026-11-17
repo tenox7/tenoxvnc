@@ -54,6 +54,18 @@ out, since an X visual cannot change under a window that is already up.
 - SunOS 4.x; 5.x (Solaris)
 - OpenVMS 7.x; 8.x
 - Windows NT 3.x; 4.x
+- PINT 3.5 and 4.0 (Windows NT on the Raspberry Pi)
+
+## Build for PINT
+
+PINT is Windows NT on the Raspberry Pi. Build TenoxVNC with the PINT SDK in Docker
+([tenox7/pint40sdk](https://hub.docker.com/r/tenox7/pint40sdk) for PINT 4.0,
+[tenox7/pint35sdk](https://hub.docker.com/r/tenox7/pint35sdk) for PINT 3.5;
+its page tells how to set it up once):
+
+```
+docker run --rm -v msvc-arm32:/opt/msvc -v "$PWD":/src tenox7/pint40sdk nmake -f Makefile.w32
+```
 
 ## Credits
 
