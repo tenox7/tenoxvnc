@@ -14,5 +14,5 @@
  */
 
 #ifndef TENOXVNC_VERSION
-#define TENOXVNC_VERSION "1.2"
+#define TENOXVNC_VERSION "1.3"
 #endif
